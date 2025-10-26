@@ -22,12 +22,3 @@ python-dotenv==1.1.1
 
 # HTTP Requests (for API integration)
 requests==2.31.0
-
-# Additional API dependencies
-spotipy==2.23.0  # Spotify Web API wrapper (optional)
-google-api-python-client==2.110.0  # YouTube API client (optional)
-
-# Development Dependencies (optional)
-# Flask-DebugToolbar==0.13.1
-# pytest==7.4.0
-# pytest-flask==1.3.0

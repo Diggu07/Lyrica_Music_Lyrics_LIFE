@@ -2,7 +2,7 @@ from flask_login import UserMixin
 from pymongo import MongoClient
 from bson import ObjectId
 import bcrypt
-from datetime import datetime
+from datetime import datetime, timezone, date
 import os
 from dotenv import load_dotenv
 
@@ -21,9 +21,9 @@ class User(UserMixin):
             self.gender = user_data.get('gender', '')
             self.profile_picture = user_data.get('profile_picture', '')
             self.is_premium = user_data.get('is_premium', False)
-            self.created_at = user_data.get('created_at', datetime.utcnow())
+            self.created_at = user_data.get('created_at', datetime.now(timezone.utc))
             self.last_login = user_data.get('last_login')
-            self.is_active = user_data.get('is_active', True)
+            self.active = user_data.get('is_active', True)  # renamed to avoid conflict
             self.playlists = user_data.get('playlists', [])
             self.liked_songs = user_data.get('liked_songs', [])
             self.listening_history = user_data.get('listening_history', [])
@@ -44,9 +44,9 @@ class User(UserMixin):
             self.gender = None
             self.profile_picture = None
             self.is_premium = False
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(timezone.utc)
             self.last_login = None
-            self.is_active = True
+            self.active = True   # renamed field
             self.playlists = []
             self.liked_songs = []
             self.listening_history = []
@@ -72,44 +72,50 @@ class User(UserMixin):
 
     def check_password(self, password):
         """Check if provided password matches the hash"""
-        return bcrypt.checkpw(password.encode('utf-8'), self.password_hash)
-
+        # Convert password_hash from string to bytes if stored as string
+        hash_bytes = self.password_hash.encode('utf-8') if isinstance(self.password_hash, str) else self.password_hash
+        return bcrypt.checkpw(password.encode('utf-8'), hash_bytes)
+    
     def save(self):
-        """Save user to database"""
         db = self.get_db_connection()
         users_collection = db.users
-        
+
+        # Convert date_of_birth from date to datetime for MongoDB
+        dob = self.date_of_birth
+        if isinstance(dob, date) and not isinstance(dob, datetime):
+            dob = datetime(dob.year, dob.month, dob.day)
+        created = self.created_at if isinstance(self.created_at, datetime) else datetime.now(timezone.utc)
+
         user_data = {
             'username': self.username,
             'email': self.email,
-            'password_hash': self.password_hash,
+            'password_hash': self.password_hash if isinstance(self.password_hash, str) else self.password_hash.decode('utf-8'),
             'first_name': self.first_name,
             'last_name': self.last_name,
-            'date_of_birth': self.date_of_birth,
+            'date_of_birth': dob,
             'gender': self.gender,
-            'profile_picture': self.profile_picture,
+            'profile_picture': self.profile_picture if self.profile_picture else '',
             'is_premium': self.is_premium,
-            'created_at': self.created_at,
+            'created_at': created,
             'last_login': self.last_login,
-            'is_active': self.is_active,
+            'is_active': self.active,
             'playlists': self.playlists,
             'liked_songs': self.liked_songs,
             'listening_history': self.listening_history,
-            'preferences': self.preferences
+            'preferences': self.preferences,
         }
-        
+
         if self.id:
-            # Update existing user
             users_collection.update_one(
                 {'_id': ObjectId(self.id)},
                 {'$set': user_data}
             )
         else:
-            # Create new user
             result = users_collection.insert_one(user_data)
             self.id = str(result.inserted_id)
-        
+
         return self
+
 
     @staticmethod
     def find_by_email(email):
@@ -146,7 +152,7 @@ class User(UserMixin):
 
     def update_last_login(self):
         """Update last login timestamp"""
-        self.last_login = datetime.utcnow()
+        self.last_login = datetime.now(timezone.utc)
         self.save()
 
     def add_to_playlist(self, playlist_id):
@@ -176,7 +182,7 @@ class User(UserMixin):
     def add_to_history(self, song_id, timestamp=None):
         """Add song to listening history"""
         if timestamp is None:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
         
         history_entry = {
             'song_id': song_id,
@@ -198,23 +204,33 @@ class User(UserMixin):
         self.save()
 
     def to_dict(self):
-        """Convert user to dictionary (excluding sensitive data)"""
+        """Convert user to dictionary (excluding sensitive data and serializing dates)"""
+        def iso(obj):
+            if isinstance(obj, (datetime, date)):
+                return obj.isoformat()
+            return obj
+
         return {
             'id': self.id,
             'username': self.username,
             'email': self.email,
             'first_name': self.first_name,
             'last_name': self.last_name,
-            'date_of_birth': self.date_of_birth,
+            'date_of_birth': iso(self.date_of_birth),
             'gender': self.gender,
             'profile_picture': self.profile_picture,
             'is_premium': self.is_premium,
-            'created_at': self.created_at,
-            'last_login': self.last_login,
-            'is_active': self.is_active,
+            'created_at': iso(self.created_at),
+            'last_login': iso(self.last_login),
+            'is_active': self.active,  # matches DB field name
             'playlists': self.playlists,
             'liked_songs': self.liked_songs,
-            'listening_history': self.listening_history,
+            'listening_history': [
+                {
+                    'song_id': entry['song_id'],
+                    'timestamp': iso(entry.get('timestamp'))
+                } for entry in self.listening_history
+            ] if self.listening_history else [],
             'preferences': self.preferences
         }
 

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
+from flask import Blueprint, jsonify, request, session
 from flask_login import login_user, logout_user, login_required, current_user
 from models.user import User
 from forms.auth_forms import (
@@ -9,195 +9,184 @@ from datetime import datetime
 import secrets
 import string
 
-# Create authentication blueprint:
-
+# Create authentication blueprint
 auth_bp = Blueprint('auth', __name__)
 
-@auth_bp.route('/login', methods=['GET', 'POST'])
-def login():
-    """User login route"""
-    if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
-    
-    form = LoginForm()
-    if form.validate_on_submit():
-        user = User.find_by_email(form.email.data)
-        if user and user.check_password(form.password.data):
-            if not user.is_active:
-                flash('Your account has been deactivated. Please contact support.', 'error')
-                return render_template('auth/login.html', form=form)
-            
-            login_user(user, remember=form.remember_me.data)
-            user.update_last_login()
-            
-            # Redirect to next page or dashboard:
-            next_page = request.args.get('next')
-            if next_page:
-                return redirect(next_page)
-            return redirect(url_for('main.dashboard'))
-        else:
-            flash('Invalid email or password.', 'error')
-    
-    return render_template('auth/login.html', form=form)
-
-@auth_bp.route('/register', methods=['GET', 'POST'])
+@auth_bp.route('/register', methods=['POST'])
 def register():
     """User registration route"""
     if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
+        return jsonify({"error": "User already logged in"}), 400
     
-    form = RegistrationForm()
-    if form.validate_on_submit():
-        user = User()     #Create new user
-        user.username = form.username.data
-        user.email = form.email.data
-        user.password_hash = User.hash_password(form.password.data)
-        user.first_name = form.first_name.data
-        user.last_name = form.last_name.data
-        user.date_of_birth = form.date_of_birth.data
-        user.gender = form.gender.data
-        user.created_at = datetime.utcnow()
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON data required"}), 400
         
-        user.save()     # Save user to database
+        # Create form with JSON data
+        form = RegistrationForm(data=data)
         
-        flash('Registration successful! You can now log in.', 'success')
-        return redirect(url_for('auth.login'))
-    
-    return render_template('auth/register.html', form=form)
+        if form.validate():
+            # Create new user
+            user = User()
+            user.username = form.username.data
+            user.email = form.email.data
+            user.password_hash = User.hash_password(form.password.data)
+            user.first_name = form.first_name.data
+            user.last_name = form.last_name.data
+            user.date_of_birth = form.date_of_birth.data
+            user.gender = form.gender.data
+            user.created_at = datetime.utcnow()
+            
+            # Save user to database
+            user.save()
+            
+            return jsonify({
+                "message": "Registration successful! You can now log in.",
+                "success": True,
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name
+                }
+            }), 201
+        else:
+            return jsonify({
+                "error": "Validation failed",
+                "details": form.errors
+            }), 400
+            
+    except Exception as e:
+        return jsonify({"error": f"Registration failed: {str(e)}"}), 500
 
-@auth_bp.route('/logout')
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    """User login route"""
+    if current_user.is_authenticated:
+        return jsonify({"error": "User already logged in"}), 400
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON data required"}), 400
+        
+        # Create form with JSON data
+        form = LoginForm(data=data)
+        
+        if form.validate():
+            user = User.find_by_email(form.email.data)
+            if user and user.check_password(form.password.data):
+                if not user.is_active:
+                    return jsonify({"error": "Account deactivated"}), 403
+                
+                login_user(user, remember=form.remember_me.data)
+                user.update_last_login()
+                
+                return jsonify({
+                    "message": "Login successful",
+                    "success": True,
+                    "user": user.to_dict()
+                }), 200
+            else:
+                return jsonify({"error": "Invalid email or password"}), 401
+        else:
+            return jsonify({
+                "error": "Validation failed",
+                "details": form.errors
+            }), 400
+            
+    except Exception as e:
+        return jsonify({"error": f"Login failed: {str(e)}"}), 500
+
+@auth_bp.route('/logout', methods=['POST'])
 @login_required
 def logout():
     """User logout route"""
     logout_user()
-    flash('You have been logged out.', 'info')
-    return redirect(url_for('main.index'))
+    return jsonify({"message": "Logout successful"}), 200
 
-@auth_bp.route('/profile', methods=['GET', 'POST'])
+@auth_bp.route('/profile', methods=['GET'])
 @login_required
-def profile():
-    """User profile page"""
-    form = UpdateProfileForm(original_username=current_user.username)
-    
-    if form.validate_on_submit():
-        current_user.username = form.username.data
-        current_user.first_name = form.first_name.data
-        current_user.last_name = form.last_name.data
-        current_user.date_of_birth = form.date_of_birth.data
-        current_user.gender = form.gender.data
+def get_profile():
+    """Get user profile"""
+    return jsonify({
+        "user": current_user.to_dict()
+    }), 200
+
+@auth_bp.route('/profile', methods=['POST'])
+@login_required
+def update_profile():
+    """Update user profile"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON data required"}), 400
+        
+        # Update user profile
+        if 'first_name' in data:
+            current_user.first_name = data['first_name']
+        if 'last_name' in data:
+            current_user.last_name = data['last_name']
+        if 'username' in data:
+            current_user.username = data['username']
+        if 'date_of_birth' in data:
+            current_user.date_of_birth = data['date_of_birth']
+        if 'gender' in data:
+            current_user.gender = data['gender']
         
         current_user.save()
-        flash('Your profile has been updated.', 'success')
-        return redirect(url_for('auth.profile'))
-    
-    elif request.method == 'GET':
-        form.username.data = current_user.username
-        form.first_name.data = current_user.first_name
-        form.last_name.data = current_user.last_name
-        form.date_of_birth.data = current_user.date_of_birth
-        form.gender.data = current_user.gender
-    
-    return render_template('auth/profile.html', form=form)
+        
+        return jsonify({
+            "message": "Profile updated successfully",
+            "user": current_user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Profile update failed: {str(e)}"}), 500
 
-@auth_bp.route('/change_password', methods=['GET', 'POST'])
+@auth_bp.route('/change_password', methods=['POST'])
 @login_required
 def change_password():
     """Change password route"""
-    form = ChangePasswordForm()
-    
-    if form.validate_on_submit():
-        if current_user.check_password(form.current_password.data):
-            current_user.password_hash = User.hash_password(form.new_password.data)
-            current_user.save()
-            flash('Your password has been changed.', 'success')
-            return redirect(url_for('auth.profile'))
-        else:
-            flash('Current password is incorrect.', 'error')
-    
-    return render_template('auth/change_password.html', form=form)
-
-@auth_bp.route('/reset_password_request', methods=['GET', 'POST'])
-def reset_password_request():
-    """Request password reset route"""
-    if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
-    
-    form = PasswordResetRequestForm()
-    if form.validate_on_submit():
-        user = User.find_by_email(form.email.data)
-        if user:
-            reset_token = generate_reset_token()
-            session['reset_token'] = reset_token
-            session['reset_email'] = user.email
-            session['reset_expires'] = datetime.utcnow().timestamp() + 3600  # 1 hour
-            
-            flash(f'Password reset token: {reset_token} (In production, this would be sent via email)', 'info')
-            return redirect(url_for('auth.reset_password'))
-        else:
-            flash('If an account with that email exists, a password reset link has been sent.', 'info')
-    
-    return render_template('auth/reset_password_request.html', form=form)
-
-@auth_bp.route('/reset_password', methods=['GET', 'POST'])
-def reset_password():
-    """Reset password route"""
-    if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
-    
-    reset_token = session.get('reset_token')
-    reset_email = session.get('reset_email')
-    reset_expires = session.get('reset_expires')
-    
-    if not reset_token or not reset_email or not reset_expires:
-        flash('Invalid or expired reset token.', 'error')
-        return redirect(url_for('auth.reset_password_request'))
-    
-    if datetime.utcnow().timestamp() > reset_expires:
-        flash('Reset token has expired.', 'error')
-        session.pop('reset_token', None)
-        session.pop('reset_email', None)
-        session.pop('reset_expires', None)
-        return redirect(url_for('auth.reset_password_request'))
-    
-    form = PasswordResetForm()
-    if form.validate_on_submit():
-        user = User.find_by_email(reset_email)
-        if user:
-            user.password_hash = User.hash_password(form.password.data)
-            user.save()
-            
-            session.pop('reset_token', None)
-            session.pop('reset_email', None)
-            session.pop('reset_expires', None)
-            
-            flash('Your password has been reset. You can now log in.', 'success')
-            return redirect(url_for('auth.login'))
-    
-    return render_template('auth/reset_password.html', form=form)
-
-@auth_bp.route('/delete_account', methods=['POST'])
-@login_required
-def delete_account():
-    """Delete user account route"""
-    current_user.is_active = False
-    current_user.save()
-    
-    logout_user()
-    flash('Your account has been deactivated.', 'info')
-    return redirect(url_for('main.index'))
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON data required"}), 400
+        
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        new_password2 = data.get('new_password2')
+        
+        if not all([current_password, new_password, new_password2]):
+            return jsonify({"error": "All password fields required"}), 400
+        
+        if new_password != new_password2:
+            return jsonify({"error": "New passwords do not match"}), 400
+        
+        if not current_user.check_password(current_password):
+            return jsonify({"error": "Current password is incorrect"}), 400
+        
+        current_user.password_hash = User.hash_password(new_password)
+        current_user.save()
+        
+        return jsonify({"message": "Password changed successfully"}), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Password change failed: {str(e)}"}), 500
 
 def generate_reset_token():
     """Generate a secure reset token"""
     return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
 
+# Error handlers for authentication
 @auth_bp.errorhandler(401)
 def unauthorized(error):
     """Handle unauthorized access"""
-    flash('Please log in to access this page.', 'warning')
-    return redirect(url_for('auth.login'))
+    return jsonify({"error": "Authentication required"}), 401
 
 @auth_bp.errorhandler(403)
 def forbidden(error):
     """Handle forbidden access"""
-    flash('You do not have permission to access this page.', 'error')
-    return redirect(url_for('main.index'))
+    return jsonify({"error": "Access forbidden"}), 403

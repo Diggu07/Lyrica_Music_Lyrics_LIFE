@@ -2,7 +2,6 @@ from flask import Flask, jsonify, request
 from flask_login import LoginManager, current_user
 from models.user import User
 from auth import auth_bp
-from api.music_api import music_api_bp
 import os
 from dotenv import load_dotenv
 
@@ -13,7 +12,8 @@ def create_app():
     app = Flask(__name__)
     
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
-    app.config['WTF_CSRF_ENABLED'] = True
+    app.config['WTF_CSRF_ENABLED'] = False
+
     
     login_manager = LoginManager()
     login_manager.init_app(app)
@@ -27,8 +27,7 @@ def create_app():
         return User.find_by_id(user_id)
     
     app.register_blueprint(auth_bp, url_prefix='/auth')
-    app.register_blueprint(music_api_bp, url_prefix='/api/music')
-    
+
     @app.route('/')
     def index():
         """API status"""
@@ -54,6 +53,17 @@ def create_app():
         if not current_user.is_authenticated:
             return jsonify({"error": "Authentication required"}), 401
         return jsonify({"playlists": current_user.playlists})
+    
+    @app.route('/routes', methods=['GET'])
+    def list_routes():
+        routes = []
+        for rule in app.url_map.iter_rules():
+            routes.append({
+                'endpoint': rule.endpoint,
+                'methods': list(rule.methods - {'HEAD', 'OPTIONS'}),
+                'path': str(rule)
+            })
+        return jsonify({'routes': routes}), 200
     
     @app.errorhandler(404)
     def not_found_error(error):
