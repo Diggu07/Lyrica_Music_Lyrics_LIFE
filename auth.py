@@ -9,7 +9,7 @@ from datetime import datetime
 import secrets
 import string
 
-# Create authentication blueprint
+# Creating authentication blueprint
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
@@ -23,11 +23,9 @@ def register():
         if not data:
             return jsonify({"error": "JSON data required"}), 400
         
-        # Create form with JSON data
         form = RegistrationForm(data=data)
         
         if form.validate():
-            # Create new user
             user = User()
             user.username = form.username.data
             user.email = form.email.data
@@ -38,7 +36,6 @@ def register():
             user.gender = form.gender.data
             user.created_at = datetime.utcnow()
             
-            # Save user to database
             user.save()
             
             return jsonify({
@@ -72,7 +69,6 @@ def login():
         if not data:
             return jsonify({"error": "JSON data required"}), 400
         
-        # Create form with JSON data
         form = LoginForm(data=data)
         
         if form.validate():
@@ -124,7 +120,6 @@ def update_profile():
         if not data:
             return jsonify({"error": "JSON data required"}), 400
         
-        # Update user profile
         if 'first_name' in data:
             current_user.first_name = data['first_name']
         if 'last_name' in data:
@@ -180,7 +175,7 @@ def generate_reset_token():
     """Generate a secure reset token"""
     return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
 
-# Error handlers for authentication
+
 @auth_bp.errorhandler(401)
 def unauthorized(error):
     """Handle unauthorized access"""

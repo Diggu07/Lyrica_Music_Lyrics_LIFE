@@ -23,7 +23,7 @@ class User(UserMixin):
             self.is_premium = user_data.get('is_premium', False)
             self.created_at = user_data.get('created_at', datetime.now(timezone.utc))
             self.last_login = user_data.get('last_login')
-            self.active = user_data.get('is_active', True)  # renamed to avoid conflict
+            self.active = user_data.get('is_active', True)
             self.playlists = user_data.get('playlists', [])
             self.liked_songs = user_data.get('liked_songs', [])
             self.listening_history = user_data.get('listening_history', [])
@@ -46,7 +46,7 @@ class User(UserMixin):
             self.is_premium = False
             self.created_at = datetime.now(timezone.utc)
             self.last_login = None
-            self.active = True   # renamed field
+            self.active = True
             self.playlists = []
             self.liked_songs = []
             self.listening_history = []
@@ -72,7 +72,6 @@ class User(UserMixin):
 
     def check_password(self, password):
         """Check if provided password matches the hash"""
-        # Convert password_hash from string to bytes if stored as string
         hash_bytes = self.password_hash.encode('utf-8') if isinstance(self.password_hash, str) else self.password_hash
         return bcrypt.checkpw(password.encode('utf-8'), hash_bytes)
     
@@ -80,7 +79,6 @@ class User(UserMixin):
         db = self.get_db_connection()
         users_collection = db.users
 
-        # Convert date_of_birth from date to datetime for MongoDB
         dob = self.date_of_birth
         if isinstance(dob, date) and not isinstance(dob, datetime):
             dob = datetime(dob.year, dob.month, dob.day)
@@ -189,10 +187,8 @@ class User(UserMixin):
             'timestamp': timestamp
         }
         
-        # Add to beginning of history (most recent first)
         self.listening_history.insert(0, history_entry)
         
-        # Keep only last 1000 entries
         if len(self.listening_history) > 1000:
             self.listening_history = self.listening_history[:1000]
         
@@ -222,7 +218,7 @@ class User(UserMixin):
             'is_premium': self.is_premium,
             'created_at': iso(self.created_at),
             'last_login': iso(self.last_login),
-            'is_active': self.active,  # matches DB field name
+            'is_active': self.active, 
             'playlists': self.playlists,
             'liked_songs': self.liked_songs,
             'listening_history': [

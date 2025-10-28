@@ -58,19 +58,15 @@ class RegistrationForm(FlaskForm):
         """Validate password strength"""
         password = password.data
         
-        # Check for at least one uppercase letter
         if not re.search(r'[A-Z]', password):
             raise ValidationError('Password must contain at least one uppercase letter.')
         
-        # Check for at least one lowercase letter
         if not re.search(r'[a-z]', password):
             raise ValidationError('Password must contain at least one lowercase letter.')
         
-        # Check for at least one digit
         if not re.search(r'\d', password):
             raise ValidationError('Password must contain at least one number.')
         
-        # Check for at least one special character
         if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
             raise ValidationError('Password must contain at least one special character.')
 
@@ -101,19 +97,15 @@ class PasswordResetForm(FlaskForm):
         """Validate password strength"""
         password = password.data
         
-        # Check for at least one uppercase letter
         if not re.search(r'[A-Z]', password):
             raise ValidationError('Password must contain at least one uppercase letter.')
-        
-        # Check for at least one lowercase letter
+
         if not re.search(r'[a-z]', password):
             raise ValidationError('Password must contain at least one lowercase letter.')
-        
-        # Check for at least one digit
+
         if not re.search(r'\d', password):
             raise ValidationError('Password must contain at least one number.')
-        
-        # Check for at least one special character
+
         if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
             raise ValidationError('Password must contain at least one special character.')
 
@@ -134,19 +126,15 @@ class ChangePasswordForm(FlaskForm):
         """Validate new password strength"""
         password = new_password.data
         
-        # Check for at least one uppercase letter
         if not re.search(r'[A-Z]', password):
             raise ValidationError('Password must contain at least one uppercase letter.')
         
-        # Check for at least one lowercase letter
         if not re.search(r'[a-z]', password):
             raise ValidationError('Password must contain at least one lowercase letter.')
         
-        # Check for at least one digit
         if not re.search(r'\d', password):
             raise ValidationError('Password must contain at least one number.')
         
-        # Check for at least one special character
         if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
             raise ValidationError('Password must contain at least one special character.')
 
@@ -179,6 +167,5 @@ class UpdateProfileForm(FlaskForm):
             if user:
                 raise ValidationError('Please use a different username.')
         
-        # Check username format (alphanumeric and underscores only)
         if not re.match(r'^[a-zA-Z0-9_]+$', username.data):
             raise ValidationError('Username can only contain letters, numbers, and underscores.')
