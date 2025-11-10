@@ -1,187 +1,111 @@
-from flask import Blueprint, jsonify, request, session
-from flask_login import login_user, logout_user, login_required, current_user
+from flask import Blueprint, request, jsonify
+from flask_login import login_user, logout_user, current_user, login_required
 from models.user import User
-from forms.auth_forms import (
-    LoginForm, RegistrationForm, PasswordResetRequestForm, 
-    PasswordResetForm, ChangePasswordForm, UpdateProfileForm
-)
-from datetime import datetime
-import secrets
-import string
+import bcrypt
 
-# Creating authentication blueprint
 auth_bp = Blueprint('auth', __name__)
 
+# ------------------------- REGISTER -------------------------
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    """User registration route"""
-    if current_user.is_authenticated:
-        return jsonify({"error": "User already logged in"}), 400
-    
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "JSON data required"}), 400
-        
-        form = RegistrationForm(data=data)
-        
-        if form.validate():
-            user = User()
-            user.username = form.username.data
-            user.email = form.email.data
-            user.password_hash = User.hash_password(form.password.data)
-            user.first_name = form.first_name.data
-            user.last_name = form.last_name.data
-            user.date_of_birth = form.date_of_birth.data
-            user.gender = form.gender.data
-            user.created_at = datetime.utcnow()
-            
-            user.save()
-            
-            return jsonify({
-                "message": "Registration successful! You can now log in.",
-                "success": True,
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "first_name": user.first_name,
-                    "last_name": user.last_name
-                }
-            }), 201
-        else:
-            return jsonify({
-                "error": "Validation failed",
-                "details": form.errors
-            }), 400
-            
-    except Exception as e:
-        return jsonify({"error": f"Registration failed: {str(e)}"}), 500
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
 
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
+
+    if not username or not email or not password:
+        return jsonify({"error": "All required fields must be filled"}), 400
+
+    if User.find_by_email(email):
+        return jsonify({"error": "Email already exists"}), 409
+
+    # ✅ Create new user and hash password
+    user = User()
+    user.username = username
+    user.email = email
+    user.first_name = first_name
+    user.last_name = last_name
+
+    # Use the static method defined in your model
+    user.password_hash = User.hash_password(password).decode('utf-8')
+    user.save()
+
+    return jsonify({"success": True, "message": "Registration successful"}), 201
+
+
+# ------------------------- LOGIN -------------------------
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """User login route"""
-    if current_user.is_authenticated:
-        return jsonify({"error": "User already logged in"}), 400
-    
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "JSON data required"}), 400
-        
-        form = LoginForm(data=data)
-        
-        if form.validate():
-            user = User.find_by_email(form.email.data)
-            if user and user.check_password(form.password.data):
-                if not user.is_active:
-                    return jsonify({"error": "Account deactivated"}), 403
-                
-                login_user(user, remember=form.remember_me.data)
-                user.update_last_login()
-                
-                return jsonify({
-                    "message": "Login successful",
-                    "success": True,
-                    "user": user.to_dict()
-                }), 200
-            else:
-                return jsonify({"error": "Invalid email or password"}), 401
-        else:
-            return jsonify({
-                "error": "Validation failed",
-                "details": form.errors
-            }), 400
-            
-    except Exception as e:
-        return jsonify({"error": f"Login failed: {str(e)}"}), 500
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
 
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    user = User.find_by_email(email)
+    if not user or not user.check_password(password):
+        return jsonify({"error": "Invalid email or password"}), 401
+
+    login_user(user)
+    user.update_last_login()
+    return jsonify({"success": True, "message": "Login successful"}), 200
+
+
+# ------------------------- LOGOUT -------------------------
 @auth_bp.route('/logout', methods=['POST'])
 @login_required
 def logout():
-    """User logout route"""
     logout_user()
-    return jsonify({"message": "Logout successful"}), 200
+    return jsonify({"success": True, "message": "Logged out"}), 200
 
-@auth_bp.route('/profile', methods=['GET'])
+
+# ------------------------- PROFILE (GET/UPDATE) -------------------------
+@auth_bp.route('/profile', methods=['GET', 'POST'])
 @login_required
-def get_profile():
-    """Get user profile"""
-    return jsonify({
-        "user": current_user.to_dict()
-    }), 200
+def profile():
+    if request.method == 'GET':
+        return jsonify({"success": True, "user": current_user.to_dict()}), 200
 
-@auth_bp.route('/profile', methods=['POST'])
-@login_required
-def update_profile():
-    """Update user profile"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "JSON data required"}), 400
-        
-        if 'first_name' in data:
-            current_user.first_name = data['first_name']
-        if 'last_name' in data:
-            current_user.last_name = data['last_name']
-        if 'username' in data:
-            current_user.username = data['username']
-        if 'date_of_birth' in data:
-            current_user.date_of_birth = data['date_of_birth']
-        if 'gender' in data:
-            current_user.gender = data['gender']
-        
-        current_user.save()
-        
-        return jsonify({
-            "message": "Profile updated successfully",
-            "user": current_user.to_dict()
-        }), 200
-        
-    except Exception as e:
-        return jsonify({"error": f"Profile update failed: {str(e)}"}), 500
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
 
+    for field in ['username', 'first_name', 'last_name']:
+        if field in data:
+            setattr(current_user, field, data[field])
+    current_user.save()
+
+    return jsonify({"success": True, "message": "Profile updated"}), 200
+
+
+# ------------------------- CHANGE PASSWORD -------------------------
 @auth_bp.route('/change_password', methods=['POST'])
 @login_required
 def change_password():
-    """Change password route"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "JSON data required"}), 400
-        
-        current_password = data.get('current_password')
-        new_password = data.get('new_password')
-        new_password2 = data.get('new_password2')
-        
-        if not all([current_password, new_password, new_password2]):
-            return jsonify({"error": "All password fields required"}), 400
-        
-        if new_password != new_password2:
-            return jsonify({"error": "New passwords do not match"}), 400
-        
-        if not current_user.check_password(current_password):
-            return jsonify({"error": "Current password is incorrect"}), 400
-        
-        current_user.password_hash = User.hash_password(new_password)
-        current_user.save()
-        
-        return jsonify({"message": "Password changed successfully"}), 200
-        
-    except Exception as e:
-        return jsonify({"error": f"Password change failed: {str(e)}"}), 500
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
 
-def generate_reset_token():
-    """Generate a secure reset token"""
-    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+    old_password = data.get('old_password')
+    new_password = data.get('new_password')
 
+    if not old_password or not new_password:
+        return jsonify({"error": "Both old and new passwords are required"}), 400
 
-@auth_bp.errorhandler(401)
-def unauthorized(error):
-    """Handle unauthorized access"""
-    return jsonify({"error": "Authentication required"}), 401
+    if not current_user.check_password(old_password):
+        return jsonify({"error": "Old password is incorrect"}), 401
 
-@auth_bp.errorhandler(403)
-def forbidden(error):
-    """Handle forbidden access"""
-    return jsonify({"error": "Access forbidden"}), 403
+    # ✅ Re-hash and update password
+    current_user.password_hash = User.hash_password(new_password).decode('utf-8')
+    current_user.save()
+
+    return jsonify({"success": True, "message": "Password changed successfully"}), 200

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Profile — Lyrica</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <main class="center-card">
+      <h2>Your profile</h2>
+      <div class="card glass">
+        <form id="profileForm" class="form">
+          <label>First name
+            <input id="first_name" type="text" />
+          </label>
+          <label>Last name
+            <input id="last_name" type="text" />
+          </label>
+          <label>Username
+            <input id="username" type="text" />
+          </label>
+          <label>Date of birth
+            <input id="date_of_birth" type="date" />
+          </label>
+          <label>Gender
+            <select id="gender">
+              <option value="">Choose</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <div class="row">
+            <button class="btn" type="submit">Save</button>
+            <a class="btn btn-ghost" href="change_password.html">Change password</a>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/navbar.js"></script>
+  <script src="js/profile.js"></script>
+</body>
+</html>

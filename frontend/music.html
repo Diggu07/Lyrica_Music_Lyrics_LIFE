@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lyrica — Music Library 🎵</title>
+
+  <!-- 🎨 Styles -->
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/music.css" />
+  <link rel="stylesheet" href="css/player.css" />
+</head>
+
+<body>
+  <div class="container glass">
+  <header class="music-header">
+    <h1>🎵 Music Library</h1>
+    <a href="dashboard.html" class="btn btn-ghost">← Dashboard</a>
+  </header>
+
+    <section class="music-section">
+      <!-- ================= PLAYER ================= -->
+      <div class="card glass player">
+        <h2>Now Playing</h2>
+
+        <div class="player-wrap">
+          <!-- Hidden audio element -->
+          <audio id="audio" preload="metadata"></audio>
+
+          <!-- Left: Cover + song meta -->
+          <div class="left">
+            <img id="cover" src="images/placeholder-album.png" alt="cover" />
+            <div class="meta">
+              <div id="title">No song</div>
+              <div id="artist">—</div>
+            </div>
+          </div>
+
+          <!-- Center: Controls + progress -->
+          <div class="center">
+            <div class="controls">
+              <button id="likeBtn" title="Like Song">♡</button>
+              <button id="shuffle" title="Shuffle">⤨</button>
+              <button id="prev" title="Previous">⏮</button>
+              <button id="playPause" class="play" title="Play">▶</button>
+              <button id="next" title="Next">⏭</button>
+              <button id="repeat" title="Repeat">🔁</button>
+            </div>
+
+            <div class="progress-wrap">
+              <span id="currentTime">0:00</span>
+              <input id="progress" type="range" min="0" max="100" value="0" />
+              <span id="duration">0:00</span>
+            </div>
+          </div>
+
+          <!-- Right: Queue + Volume -->
+          <div class="right">
+            <button id="queueToggle" title="Open queue">☰</button>
+            <input
+              id="volume"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="1"
+              title="Volume"
+            />
+          </div>
+        </div>
+
+        <!-- Queue (hidden by default) -->
+        <div id="queue" class="queue hidden">
+          <h3>Up Next</h3>
+          <ul id="queueList"></ul>
+        </div>
+      </div>
+
+      <!-- ================= SONG LIST ================= -->
+      <div class="card glass list">
+        <h2>Available Songs</h2>
+        <ul id="song-list"></ul>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= SCRIPTS ================= -->
+   <script src="js/lyrica_player.js"></script>
+ 
+</body>
+</html>

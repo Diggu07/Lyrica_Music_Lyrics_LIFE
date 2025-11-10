@@ -57,6 +57,9 @@ class User(UserMixin):
                 'autoplay': True
             }
 
+    # -----------------------------
+    # DATABASE CONNECTION
+    # -----------------------------
     @staticmethod
     def get_db_connection():
         """Get MongoDB connection"""
@@ -65,6 +68,9 @@ class User(UserMixin):
         client = MongoClient(mongo_uri)
         return client[db_name]
 
+    # -----------------------------
+    # PASSWORD METHODS
+    # -----------------------------
     @staticmethod
     def hash_password(password):
         """Hash a password using bcrypt"""
@@ -75,6 +81,9 @@ class User(UserMixin):
         hash_bytes = self.password_hash.encode('utf-8') if isinstance(self.password_hash, str) else self.password_hash
         return bcrypt.checkpw(password.encode('utf-8'), hash_bytes)
     
+    # -----------------------------
+    # SAVE / UPDATE
+    # -----------------------------
     def save(self):
         db = self.get_db_connection()
         users_collection = db.users
@@ -92,7 +101,7 @@ class User(UserMixin):
             'last_name': self.last_name,
             'date_of_birth': dob,
             'gender': self.gender,
-            'profile_picture': self.profile_picture if self.profile_picture else '',
+            'profile_picture': self.profile_picture or '',
             'is_premium': self.is_premium,
             'created_at': created,
             'last_login': self.last_login,
@@ -104,103 +113,91 @@ class User(UserMixin):
         }
 
         if self.id:
-            users_collection.update_one(
-                {'_id': ObjectId(self.id)},
-                {'$set': user_data}
-            )
+            users_collection.update_one({'_id': ObjectId(self.id)}, {'$set': user_data})
         else:
             result = users_collection.insert_one(user_data)
             self.id = str(result.inserted_id)
 
         return self
 
-
+    # -----------------------------
+    # FIND METHODS
+    # -----------------------------
     @staticmethod
     def find_by_email(email):
-        """Find user by email"""
         db = User.get_db_connection()
-        users_collection = db.users
-        user_data = users_collection.find_one({'email': email})
-        if user_data:
-            return User(user_data)
-        return None
+        user_data = db.users.find_one({'email': email})
+        return User(user_data) if user_data else None
 
     @staticmethod
     def find_by_username(username):
-        """Find user by username"""
         db = User.get_db_connection()
-        users_collection = db.users
-        user_data = users_collection.find_one({'username': username})
-        if user_data:
-            return User(user_data)
-        return None
+        user_data = db.users.find_one({'username': username})
+        return User(user_data) if user_data else None
 
     @staticmethod
     def find_by_id(user_id):
-        """Find user by ID"""
         db = User.get_db_connection()
-        users_collection = db.users
         try:
-            user_data = users_collection.find_one({'_id': ObjectId(user_id)})
-            if user_data:
-                return User(user_data)
+            user_data = db.users.find_one({'_id': ObjectId(user_id)})
+            return User(user_data) if user_data else None
         except:
-            pass
-        return None
+            return None
 
+    # -----------------------------
+    # ACTIVITY + STATUS
+    # -----------------------------
     def update_last_login(self):
-        """Update last login timestamp"""
         self.last_login = datetime.now(timezone.utc)
         self.save()
 
+    def is_active(self):
+        """Flask-Login uses this to check if the user is active."""
+        return self.active
+
+    # -----------------------------
+    # PLAYLIST / SONG METHODS
+    # -----------------------------
     def add_to_playlist(self, playlist_id):
-        """Add playlist to user's playlists"""
         if playlist_id not in self.playlists:
             self.playlists.append(playlist_id)
             self.save()
 
     def remove_from_playlist(self, playlist_id):
-        """Remove playlist from user's playlists"""
         if playlist_id in self.playlists:
             self.playlists.remove(playlist_id)
             self.save()
 
     def like_song(self, song_id):
-        """Add song to liked songs"""
         if song_id not in self.liked_songs:
             self.liked_songs.append(song_id)
             self.save()
 
     def unlike_song(self, song_id):
-        """Remove song from liked songs"""
         if song_id in self.liked_songs:
             self.liked_songs.remove(song_id)
             self.save()
 
     def add_to_history(self, song_id, timestamp=None):
-        """Add song to listening history"""
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
-        
-        history_entry = {
-            'song_id': song_id,
-            'timestamp': timestamp
-        }
-        
+        history_entry = {'song_id': song_id, 'timestamp': timestamp}
         self.listening_history.insert(0, history_entry)
-        
         if len(self.listening_history) > 1000:
             self.listening_history = self.listening_history[:1000]
-        
         self.save()
 
+    # -----------------------------
+    # PREFERENCES
+    # -----------------------------
     def update_preferences(self, new_preferences):
-        """Update user preferences"""
         self.preferences.update(new_preferences)
         self.save()
 
+    # -----------------------------
+    # CONVERSION
+    # -----------------------------
     def to_dict(self):
-        """Convert user to dictionary (excluding sensitive data and serializing dates)"""
         def iso(obj):
             if isinstance(obj, (datetime, date)):
                 return obj.isoformat()
@@ -218,14 +215,12 @@ class User(UserMixin):
             'is_premium': self.is_premium,
             'created_at': iso(self.created_at),
             'last_login': iso(self.last_login),
-            'is_active': self.active, 
+            'is_active': self.active,
             'playlists': self.playlists,
             'liked_songs': self.liked_songs,
             'listening_history': [
-                {
-                    'song_id': entry['song_id'],
-                    'timestamp': iso(entry.get('timestamp'))
-                } for entry in self.listening_history
+                {'song_id': e['song_id'], 'timestamp': iso(e.get('timestamp'))}
+                for e in self.listening_history
             ] if self.listening_history else [],
             'preferences': self.preferences
         }

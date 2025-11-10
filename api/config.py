@@ -3,7 +3,9 @@ API Configuration for external music services
 """
 import os
 from dotenv import load_dotenv
-
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))  # one level up from /api/
+DOTENV_PATH = os.path.join(ROOT_DIR, ".env")
+print("🔍 Loading .env from:", DOTENV_PATH)
 load_dotenv()
 
 class APIConfig:
@@ -33,6 +35,13 @@ class APIConfig:
     
     # Cache settings
     CACHE_DURATION = 3600  # 1 hour in seconds
+
+    # -----------------------------------------
+    # 🔗 Lyrica Project APIs
+    # -----------------------------------------
+    NEWS_API_KEY = os.getenv('NEWS_API_KEY', '')
+    TICKETMASTER_API_KEY = os.getenv('TICKETMASTER_API_KEY', '')
+    LISTEN_NOTES_API_KEY = os.getenv('LISTEN_NOTES_API_KEY', '')
     
     @classmethod
     def get_spotify_credentials(cls):

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Discover — Lyrica</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>🎧 Discover</h1>
+
+  <section>
+    <h2>Podcasts</h2>
+    <ul>
+      {% for title, publisher, url in podcasts %}
+      <li><a href="{{ url }}" target="_blank">{{ title }}</a> — {{ publisher }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Entertainment News</h2>
+    <ul>
+      {% for title, source, url in news %}
+      <li><a href="{{ url }}" target="_blank">{{ title }}</a> — {{ source }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Concerts Near You</h2>
+    <ul>
+      {% for name, venue, date, url in concerts %}
+      <li><a href="{{ url }}" target="_blank">{{ name }}</a> at {{ venue }} ({{ date }})</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <script src="js/script.js"></script>
+</body>
+</html>

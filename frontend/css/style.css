@@ -1,0 +1,395 @@
+/* ============================================================
+   LYRICA — style.css
+   Spotify-inspired Purple & Black Theme
+   Clean, modern design inspired by Spotify's aesthetic
+   ============================================================ */
+:root {
+  --bg-primary: #000000;      /* Pure black background */
+  --bg-secondary: #121212;    /* Dark gray black */
+  --bg-elevated: #181818;     /* Elevated surfaces */
+  --bg-hover: #1a1a1a;        /* Hover state */
+  --card: #181818;            /* Card background */
+  --purple-primary: #8b5cf6;  /* Main purple accent */
+  --purple-hover: #9d6ff7;    /* Purple hover state */
+  --purple-light: #a78bfa;    /* Light purple */
+  --text-primary: #ffffff;    /* White text */
+  --text-secondary: #b3b3b3;  /* Gray text */
+  --text-subdued: #6b7280;    /* Muted gray */
+  --border: #282828;          /* Subtle borders */
+  --radius: 8px;
+  --max-width: 980px;
+}
+
+* { 
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100%;
+}
+
+/* ======================
+   Navbar
+   ====================== */
+.navbar {
+  width: 100%;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--purple-primary);
+  letter-spacing: -0.5px;
+}
+.nav-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.btn {
+  background: var(--purple-primary);
+  border: none;
+  padding: 12px 32px;
+  border-radius: 500px;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.btn:hover {
+  background: var(--purple-hover);
+  transform: scale(1.04);
+}
+.btn-ghost {
+  background: transparent;
+  border: 2px solid var(--purple-primary);
+  padding: 10px 28px;
+  border-radius: 500px;
+  color: var(--purple-primary);
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+.btn-ghost:hover {
+  border-color: var(--purple-hover);
+  color: var(--purple-hover);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+/* ======================
+   Layout / Containers
+   ====================== */
+.center-card {
+  max-width: 450px;
+  margin: 10vh auto;
+  text-align: center;
+  padding: 24px;
+}
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* ======================
+   Cards
+   ====================== */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 24px;
+  transition: background 0.3s ease;
+}
+.card:hover {
+  background: var(--bg-elevated);
+}
+
+/* ======================
+   Forms
+   ====================== */
+.form label {
+  display: block;
+  text-align: left;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.form input, .form select {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+.form input:focus {
+  border-color: var(--purple-primary);
+  outline: none;
+}
+.form input::placeholder {
+  color: var(--text-subdued);
+}
+.row { 
+  display: flex; 
+  gap: 12px; 
+  justify-content: center; 
+  margin-top: 16px; 
+}
+.muted { 
+  color: var(--text-secondary); 
+  font-size: 14px; 
+}
+.small { 
+  font-size: 12px; 
+  color: var(--text-subdued);
+}
+
+/* ======================
+   Profile Section
+   ====================== */
+.account-section {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 32px;
+  max-width: 700px;
+  margin: 24px auto;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+.profile-pic {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-elevated);
+}
+.profile-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.profile-header .username { 
+  font-size: 0.875rem; 
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.profile-details p {
+  margin: 12px 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+.profile-details span { 
+  color: var(--purple-primary); 
+  font-weight: 600; 
+}
+.user-info {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.user-info strong { 
+  color: var(--purple-primary);
+  font-weight: 600;
+}
+
+/* ======================
+   Headings
+   ====================== */
+h1, h2, h3 {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+h1 {
+  font-size: 2rem;
+  margin-bottom: 8px;
+}
+h2 {
+  font-size: 1.5rem;
+  margin-bottom: 16px;
+}
+
+/* ======================
+   Links
+   ====================== */
+a {
+  color: var(--purple-primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+a:hover {
+  color: var(--purple-hover);
+}
+
+/* ======================
+   Responsive
+   ====================== */
+@media (max-width: 600px) {
+  .navbar { 
+    padding: 12px 16px; 
+  }
+  .brand { 
+    font-size: 20px; 
+  }
+  .center-card { 
+    margin-top: 40px; 
+    padding: 16px; 
+  }
+  .btn {
+    padding: 10px 24px;
+    font-size: 12px;
+  }
+  .btn-ghost {
+    padding: 8px 20px;
+    font-size: 12px;
+  }
+}
+
+/* ======================
+   Dashboard Header Fix
+   ====================== */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;     /* ✅ vertically centers title & buttons */
+  flex-wrap: wrap;         /* ✅ prevents overlap on small screens */
+  margin-bottom: 20px;
+  background: var(--bg-secondary);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.header h1 {
+  font-size: 1.8rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.header .actions {
+  display: flex;
+  gap: 10px;
+}
+
+.header .actions .btn-ghost {
+  border: 1px solid var(--purple-primary);
+  color: var(--purple-primary);
+  padding: 8px 20px;
+  border-radius: 50px;
+  transition: all 0.2s ease;
+}
+
+.header .actions .btn-ghost:hover {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--purple-hover);
+  border-color: var(--purple-hover);
+}
+
+/* Responsive header fix */
+@media (max-width: 600px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .header .actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+/* ======================
+   Music Page Header Fix
+   ====================== */
+.music-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--bg-secondary);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.music-header h1 {
+  font-size: 1.8rem;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.music-header .btn-ghost {
+  border: 1px solid var(--purple-primary);
+  color: var(--purple-primary);
+  padding: 8px 20px;
+  border-radius: 50px;
+  transition: all 0.2s ease;
+}
+
+.music-header .btn-ghost:hover {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--purple-hover);
+  border-color: var(--purple-hover);
+}
+
+/* Responsive alignment fix */
+@media (max-width: 600px) {
+  .music-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+/* ===== Hide default cover image until playback starts ===== */
+#cover {
+  display: none;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: none;
+}
+
+/* When a song is playing, show the cover */
+#cover.active {
+  display: block;
+}

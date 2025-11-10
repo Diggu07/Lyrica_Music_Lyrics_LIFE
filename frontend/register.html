@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Register — Lyrica</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <main class="center-card">
+      <h2>Create account</h2>
+      <div class="card glass">
+        <form id="registerForm" class="form">
+          <label>Username
+            <input id="username" type="text" required placeholder="username" />
+          </label>
+          <label>Email
+            <input id="email" type="email" required placeholder="you@example.com" />
+          </label>
+          <label>Password
+            <input id="password" type="password" required placeholder="min 6 chars" />
+          </label>
+          <label>First name
+            <input id="first_name" type="text" placeholder="First" />
+          </label>
+          <label>Last name
+            <input id="last_name" type="text" placeholder="Last" />
+          </label>
+          <button class="btn" type="submit">Register</button>
+        </form>
+        <p class="muted">Already registered? <a href="login.html">Login</a></p>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/navbar.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>

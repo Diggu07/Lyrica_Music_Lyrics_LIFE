@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Dashboard — Lyrica</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+
+  <body>
+    <div id="app">
+      <main class="container">
+        <!-- 🌟 HEADER -->
+        <section class="header">
+          <h1 id="welcome">Dashboard</h1>
+          <div class="actions">
+            <a class="btn btn-ghost" href="music.html">Music</a>
+          </div>
+        </section>
+
+        <!-- 📊 STATS CARDS -->
+        <section class="grid">
+          <div class="card glass stat">
+            <h3>Playlists</h3>
+            <p id="playlistsCount">—</p>
+          </div>
+          <div class="card glass stat">
+            <h3>❤️ Liked Songs</h3>
+            <p id="likedCount">0</p>
+          </div>
+          <div class="card glass stat">
+            <h3>🎧 Listening History</h3>
+            <p id="historyCount">—</p>
+          </div>
+        </section>
+
+        <!-- 🔥 LEADERBOARD -->
+        <section class="card glass" id="leaderboardSection">
+          <h3>🔥 Top Songs Leaderboard</h3>
+          <div id="leaderboard" class="song-list"></div>
+        </section>
+
+        <!-- 🕒 RECENTLY PLAYED -->
+        <section class="card glass" id="recentSection">
+          <h3>🕒 Recently Played</h3>
+          <div id="recent" class="song-list"></div>
+        </section>
+
+        <!-- 👤 ACCOUNT INFO -->
+        <section class="card glass" id="accountSection">
+          <h3>Account</h3>
+          <div id="userInfo" class="user-info"></div>
+          <pre id="rawUser" class="muted small" style="display: none"></pre>
+        </section>
+      </main>
+    </div>
+
+    <!-- ❤️ Liked Songs Counter Script -->
+    <script>
+      document.addEventListener("DOMContentLoaded", async () => {
+        const likedCountEl = document.getElementById("likedCount");
+        
+        try {
+          const res = await fetch("/songs/liked");
+          if (!res.ok) throw new Error("Backend returned error");
+          const data = await res.json();
+          
+          likedCountEl.textContent = data.length || 0;
+          console.log(`❤️ Liked songs count updated: ${data.length}`);
+        } catch (err) {
+          console.warn("⚠️ Could not fetch from backend — falling back to localStorage:", err);
+          
+          const localLiked = JSON.parse(localStorage.getItem("likedSongs") || "[]");
+          likedCountEl.textContent = localLiked.length || 0;
+          console.log(`❤️ Liked songs count (local): ${localLiked.length}`);
+        }
+      });
+      </script>
+    
+    <!-- 🎧 Listening History Count -->
+    <script>
+      document.addEventListener("DOMContentLoaded", async () => {
+        const historyCountEl = document.getElementById("historyCount");
+        
+        try {
+          const res = await fetch("/songs/recent");
+          if (!res.ok) throw new Error("Failed to fetch recent songs");
+          const data = await res.json();
+          
+          console.log("🎧 /songs/recent data:", data);
+          const totalHistory = Array.isArray(data) ? data.length : 0;
+          historyCountEl.textContent = totalHistory;
+        } catch (err) {
+          console.error("⚠️ Could not update listening history count:", err);
+          historyCountEl.textContent = "0";
+        }
+      });
+    </script>
+    <!-- ✅ JS Imports -->
+    <script src="js/api.js"></script>
+    <script src="js/navbar.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/leaderboard.js"></script>
+
+  </body>
+</html>

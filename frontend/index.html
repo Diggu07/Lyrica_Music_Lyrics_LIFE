@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Lyrica — Welcome</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <main class="center-card">
+      <h1 class="brand">Lyrica</h1>
+      <p class="lead">Welcome to Lyrica</p>
+      <div class="card glass">
+        <p>API status:</p>
+        <button id="checkApi" class="btn">Check API</button>
+        <p id="apiResult" class="muted"></p>
+        <div class="row">
+          <a class="btn btn-ghost" href="login.html">Login</a>
+          <a class="btn btn-ghost" href="register.html">Register</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/navbar.js"></script>
+  <script>
+    document.getElementById('checkApi').addEventListener('click', async () => {
+      const res = await apiRequest('/');
+      const el = document.getElementById('apiResult');
+      if (res && res.status) {
+        el.innerText = `OK — ${res.status} (v:${res.version || 'n/a'})`;
+        el.className = 'ok';
+      } else if (res && res.error) {
+        el.innerText = `Error: ${res.error}`;
+        el.className = 'error';
+      } else {
+        el.innerText = JSON.stringify(res);
+      }
+    });
+  </script>
+</body>
+</html>
