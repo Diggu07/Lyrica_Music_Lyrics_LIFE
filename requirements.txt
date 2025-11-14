@@ -22,3 +22,6 @@ python-dotenv==1.1.1
 
 # HTTP Requests (for API integration)
 requests==2.31.0
+
+# Google API Client (for YouTube)
+google-api-python-client==2.154.0

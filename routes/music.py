@@ -1,15 +1,16 @@
-from flask import Blueprint, jsonify, current_app
-import os
+# routes/music.py
+from flask import Blueprint, jsonify
 
-music_bp = Blueprint("music", __name__)
+bp = Blueprint("music", __name__)
 
-@music_bp.route("/api/songs", methods=["GET"])
-def get_songs():
-    """Return list of available songs"""
-    songs_dir = os.path.join(current_app.root_path, "static", "songs")
+@bp.route("/tracks", methods=["GET"])
+def list_tracks():
+    # Return example tracks list
+    return jsonify({"tracks": [
+        {"id": 1, "title": "Sample Track", "artist": "Artist A"},
+        {"id": 2, "title": "Another Track", "artist": "Artist B"}
+    ]}), 200
 
-    if not os.path.exists(songs_dir):
-        return jsonify({"error": "Songs directory not found"}), 404
-
-    songs = [f for f in os.listdir(songs_dir) if f.endswith(".mp3")]
-    return jsonify({"songs": songs})
+@bp.route("/tracks/<int:track_id>", methods=["GET"])
+def get_track(track_id):
+    return jsonify({"id": track_id, "title": f"Track {track_id}", "artist": "Unknown"}), 200
