@@ -37,6 +37,9 @@
 *.out
 *.app
 
+# API KEYS
+.env
+
 # debug information files
 *.dwo
 venv/
