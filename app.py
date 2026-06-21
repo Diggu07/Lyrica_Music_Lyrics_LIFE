@@ -2,14 +2,24 @@
 import os
 from dotenv import load_dotenv
 
+load_dotenv()  # Must be first so MONGO_URI etc. are available everywhere
+
+# Monkeypatch MongoClient using mongomock for local development without local mongod
+try:
+    import mongomock
+    import pymongo
+    pymongo.MongoClient = mongomock.MongoClient
+    print("[MONGOMOCK] MongoClient monkeypatched with mongomock successfully!")
+except ImportError:
+    pass
+
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import safe_join
 from flask_login import LoginManager, current_user
 from flask_cors import CORS
+from routes.user_routes import user_bp
 
-load_dotenv()
 
-# ---------- Helper: attempt imports but show clear warnings ----------
 def try_import(module_path, symbol=None):
     try:
         if symbol:
@@ -18,7 +28,7 @@ def try_import(module_path, symbol=None):
         else:
             return __import__(module_path, fromlist=["*"])
     except Exception as e:
-        print(f"⚠️  Warning: failed to import {module_path} {('-> '+symbol) if symbol else ''}: {e}")
+        print(f"Warning: failed to import {module_path} {('-> '+symbol) if symbol else ''}: {e}")
         return None
 
 # Import User model if available
@@ -28,12 +38,16 @@ User = try_import("models.user", "User")
 auth_bp = try_import("auth", "auth_bp")
 music_bp = try_import("routes.music", "bp") or try_import("routes.music", "music_bp")
 playlist_bp = try_import("routes.playlist_routes", "bp") or try_import("routes.playlist_routes", "playlist_routes") or try_import("routes.playlist_routes", "playlist_bp")
+user_bp = try_import("routes.user_routes", "user_bp")
 song_activity_bp = try_import("routes.song_activity_routes", "bp") or try_import("routes.song_activity_routes", "song_activity_routes")
 discover_bp = try_import("routes.discover_routes", "bp") or try_import("routes.discover_routes", "discover_bp")
+search_bp = try_import("routes.search_routes", "search_bp")
+lyrics_bp = try_import("routes.lyrics_routes", "lyrics_bp")
+
 
 def create_app():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    frontend_dir = os.path.join(base_dir, "frontend")  # the folder containing index.html (or your build)
+    frontend_dir = os.path.join(base_dir, "Lyrica", "dist")  # the folder containing index.html (or your build)
     songs_dir = os.path.join(base_dir, "static", "songs")
 
     app = Flask(
@@ -67,17 +81,23 @@ def create_app():
         return User.find_by_id(user_id)
 
     # ---------- Register blueprints under /api prefixes ----------
-    # This enforces a consistent API surface: /api/auth..., /api/music..., etc.
     if auth_bp:
         app.register_blueprint(auth_bp, url_prefix="/api/auth")
     if music_bp:
         app.register_blueprint(music_bp, url_prefix="/api/music")
     if playlist_bp:
         app.register_blueprint(playlist_bp, url_prefix="/api/playlists")
+    if user_bp:
+        app.register_blueprint(user_bp, url_prefix="/api/user")
     if song_activity_bp:
         app.register_blueprint(song_activity_bp, url_prefix="/api/song_activity")
     if discover_bp:
         app.register_blueprint(discover_bp, url_prefix="/api/discover")
+    if search_bp:
+        app.register_blueprint(search_bp, url_prefix="/api")
+    if lyrics_bp:
+        app.register_blueprint(lyrics_bp, url_prefix="/api/lyrics")
+
 
     # ---------- Simple API (ping / route list) ----------
     @app.route("/api/ping")
@@ -156,10 +176,48 @@ def create_app():
     def internal_error(error):
         return jsonify({"error": "Internal server error"}), 500
 
+        # ---------- Content Security Policy (CSP) override ----------
+    @app.after_request
+    def apply_csp(response):
+        # Allow YouTube origins for frames, media and connect requests
+        # Allow inline styles for style-src-elem to support Vite stylesheet insertions
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; "
+            "connect-src 'self' https://www.googleapis.com https://app.ticketmaster.com https://*.ticketmaster.com https://www.youtube.com; "
+            "img-src 'self' data: https: blob:; "
+            "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; "
+            "media-src 'self' https: blob:; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com data:;"
+        )
+        return response
     return app
+
+def seed_demo_user(app):
+    """Seed a demo user into the in-memory DB on startup so login always works."""
+    with app.app_context():
+        try:
+            if User is None:
+                return
+            if not User.find_by_email("demo@lyrica.com"):
+                demo = User()
+                demo.username = "demo"
+                demo.email = "demo@lyrica.com"
+                demo.first_name = "Demo"
+                demo.last_name = "User"
+                demo.password_hash = User.hash_password("Demo1234!").decode("utf-8")
+                demo.save()
+                print("[SEED] Demo user created: demo@lyrica.com / Demo1234!")
+            else:
+                print("[SEED] Demo user already exists.")
+        except Exception as e:
+            print(f"[SEED] Warning: could not seed demo user: {e}")
 
 if __name__ == "__main__":
     app = create_app()
+    seed_demo_user(app)
     debug_flag = os.getenv("FLASK_DEBUG", "1") == "1"
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=debug_flag)
-    
+

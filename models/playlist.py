@@ -1,12 +1,20 @@
-from pymongo import MongoClient
+import pymongo
 from bson import ObjectId
+import os
 
-client = MongoClient("mongodb://localhost:27017/")
-db = client['lyrica']
+_db = None
+
+def get_db():
+    global _db
+    if _db is None:
+        _mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+        client = pymongo.MongoClient(_mongo_uri)
+        _db = client['lyrica_music']
+    return _db
 
 class Playlist:
     def __init__(self):
-        self.collection = db['playlists']
+        self.collection = get_db()['playlists']
 
     def create_playlist(self, user_id, name):
         playlist = {"user_id": user_id, "name": name, "songs": []}

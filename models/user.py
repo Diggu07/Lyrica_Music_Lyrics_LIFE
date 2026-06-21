@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Singleton MongoDB client — shared across all User method calls
+_mongo_client = None
+
 class User(UserMixin):
     def __init__(self, user_data=None):
         if user_data:
@@ -26,6 +29,9 @@ class User(UserMixin):
             self.active = user_data.get('is_active', True)
             self.playlists = user_data.get('playlists', [])
             self.liked_songs = user_data.get('liked_songs', [])
+            self.followed_artists = user_data.get('followed_artists')
+            if self.followed_artists is None:
+                self.followed_artists = ['arijit-singh', 'sabrina-carpenter', 'the-weeknd']
             self.listening_history = user_data.get('listening_history', [])
             self.preferences = user_data.get('preferences', {
                 'theme': 'dark',
@@ -49,6 +55,7 @@ class User(UserMixin):
             self.active = True
             self.playlists = []
             self.liked_songs = []
+            self.followed_artists = ['arijit-singh', 'sabrina-carpenter', 'the-weeknd']
             self.listening_history = []
             self.preferences = {
                 'theme': 'dark',
@@ -62,11 +69,13 @@ class User(UserMixin):
     # -----------------------------
     @staticmethod
     def get_db_connection():
-        """Get MongoDB connection"""
-        mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+        """Get MongoDB connection — uses a singleton client to share state across calls."""
+        global _mongo_client
+        if _mongo_client is None:
+            mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+            _mongo_client = MongoClient(mongo_uri)
         db_name = os.getenv('DB_NAME', 'lyrica_music')
-        client = MongoClient(mongo_uri)
-        return client[db_name]
+        return _mongo_client[db_name]
 
     # -----------------------------
     # PASSWORD METHODS
@@ -78,8 +87,22 @@ class User(UserMixin):
 
     def check_password(self, password):
         """Check if provided password matches the hash"""
-        hash_bytes = self.password_hash.encode('utf-8') if isinstance(self.password_hash, str) else self.password_hash
-        return bcrypt.checkpw(password.encode('utf-8'), hash_bytes)
+
+        try:
+            hash_bytes = (
+                self.password_hash.encode("utf-8")
+                if isinstance(self.password_hash, str)
+                else self.password_hash
+            )
+
+            # If password_hash is invalid, this will raise ValueError
+            return bcrypt.checkpw(password.encode("utf-8"), hash_bytes)
+
+        except Exception:
+            # Invalid or corrupted hash → always reject login
+            return False
+
+
     
     # -----------------------------
     # SAVE / UPDATE
@@ -87,6 +110,7 @@ class User(UserMixin):
     def save(self):
         db = self.get_db_connection()
         users_collection = db.users
+        print("[DB] Saving user to DB -->", db.name)
 
         dob = self.date_of_birth
         if isinstance(dob, date) and not isinstance(dob, datetime):
@@ -108,15 +132,18 @@ class User(UserMixin):
             'is_active': self.active,
             'playlists': self.playlists,
             'liked_songs': self.liked_songs,
+            'followed_artists': self.followed_artists,
             'listening_history': self.listening_history,
             'preferences': self.preferences,
         }
 
         if self.id:
             users_collection.update_one({'_id': ObjectId(self.id)}, {'$set': user_data})
+            print("[DB] Updated user id:", self.id)
         else:
             result = users_collection.insert_one(user_data)
             self.id = str(result.inserted_id)
+            print("[DB] Inserted new user id:", self.id)
 
         return self
 
@@ -184,8 +211,58 @@ class User(UserMixin):
         history_entry = {'song_id': song_id, 'timestamp': timestamp}
         self.listening_history.insert(0, history_entry)
         if len(self.listening_history) > 1000:
-            self.listening_history = self.listening_history[:1000]
-        self.save()
+                self.listening_history = self.listening_history[:1000]
+                self.save()
+        # Add these methods to your User class
+
+    def get_liked_songs(self):
+        return self.liked_songs
+
+    def add_liked_song(self, song_id):
+        if not self.id:
+            return
+        if song_id not in self.liked_songs:
+            self.liked_songs.append(song_id)
+            db = self.get_db_connection()
+            try:
+                db.users.update_one({'_id': ObjectId(self.id)}, {'$addToSet': {'liked_songs': song_id}})
+            except Exception:
+                # Fallback: save entire user document
+                self.save()
+
+    def remove_liked_song(self, song_id):
+        if not self.id:
+            return
+        if song_id in self.liked_songs:
+            self.liked_songs.remove(song_id)
+            db = self.get_db_connection()
+            try:
+                db.users.update_one({'_id': ObjectId(self.id)}, {'$pull': {'liked_songs': song_id}})
+            except Exception:
+                # Fallback: save entire user document
+                self.save()
+
+    def follow_artist(self, artist_id):
+        if not self.id:
+            return
+        if artist_id not in self.followed_artists:
+            self.followed_artists.append(artist_id)
+            db = self.get_db_connection()
+            try:
+                db.users.update_one({'_id': ObjectId(self.id)}, {'$addToSet': {'followed_artists': artist_id}})
+            except Exception:
+                self.save()
+
+    def unfollow_artist(self, artist_id):
+        if not self.id:
+            return
+        if artist_id in self.followed_artists:
+            self.followed_artists.remove(artist_id)
+            db = self.get_db_connection()
+            try:
+                db.users.update_one({'_id': ObjectId(self.id)}, {'$pull': {'followed_artists': artist_id}})
+            except Exception:
+                self.save()
 
     # -----------------------------
     # PREFERENCES
@@ -218,6 +295,7 @@ class User(UserMixin):
             'is_active': self.active,
             'playlists': self.playlists,
             'liked_songs': self.liked_songs,
+            'followed_artists': self.followed_artists,
             'listening_history': [
                 {'song_id': e['song_id'], 'timestamp': iso(e.get('timestamp'))}
                 for e in self.listening_history

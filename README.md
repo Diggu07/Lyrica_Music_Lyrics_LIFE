@@ -94,26 +94,13 @@ Lyrica_Music_Lyrics_LIFE/
 ├── forms/                 # WTForms
 │   ├── __init__.py
 │   └── auth_forms.py     # Authentication forms
-├── templates/             # Jinja2 templates
-│   ├── base.html         # Base template
+├── frontend/             # Jinja2 templates
 │   ├── index.html        # Home page
-│   ├── dashboard.html    # User dashboard
-│   ├── playlists.html    # Playlists page
-│   ├── auth/             # Authentication templates
-│   │   ├── login.html
-│   │   ├── register.html
-│   │   ├── profile.html
-│   │   ├── change_password.html
-│   │   ├── reset_password_request.html
-│   │   └── reset_password.html
-│   └── errors/           # Error pages
-│       ├── 404.html
-│       └── 500.html
-├── static/               # Static files
+|   ├── images            # images of cover of songs
 │   ├── css/
-│   │   └── style.css    # Custom styles
+│   │   └── app.css       # Custom styles
 │   └── js/
-│       └── main.js      # JavaScript functionality
+│       └── app.js        # JavaScript functionality
 ├── venv/                # Virtual environment
 ├── .env.example         # Environment variables template
 ├── requirements.txt     # Python dependencies
@@ -190,14 +177,7 @@ Lyrica_Music_Lyrics_LIFE/
 4. Add tests if applicable
 5. Submit a pull request
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Support
 
 For support and questions, please open an issue on the GitHub repository.
-
----
-
-**Note**: This is a development version. For production deployment, ensure proper security measures, environment configuration, and database setup.

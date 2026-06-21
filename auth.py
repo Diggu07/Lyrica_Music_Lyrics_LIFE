@@ -24,14 +24,14 @@ def register():
     if User.find_by_email(email):
         return jsonify({"error": "Email already exists"}), 409
 
-    # ✅ Create new user and hash password
+    # Create new user
     user = User()
     user.username = username
     user.email = email
     user.first_name = first_name
     user.last_name = last_name
 
-    # Use the static method defined in your model
+    # Hash password correctly
     user.password_hash = User.hash_password(password).decode('utf-8')
     user.save()
 
@@ -41,6 +41,9 @@ def register():
 # ------------------------- LOGIN -------------------------
 @auth_bp.route('/login', methods=['POST'])
 def login():
+
+    logout_user()
+
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid JSON"}), 400
@@ -52,12 +55,16 @@ def login():
         return jsonify({"error": "Email and password are required"}), 400
 
     user = User.find_by_email(email)
+
+    # Validate user + password
     if not user or not user.check_password(password):
         return jsonify({"error": "Invalid email or password"}), 401
 
+    # Successful login
     login_user(user)
     user.update_last_login()
-    return jsonify({"success": True, "message": "Login successful"}), 200
+
+    return jsonify({"success": True, "message": "Login successful", "user": user.to_dict()}), 200
 
 
 # ------------------------- LOGOUT -------------------------
@@ -82,8 +89,8 @@ def profile():
     for field in ['username', 'first_name', 'last_name']:
         if field in data:
             setattr(current_user, field, data[field])
-    current_user.save()
 
+    current_user.save()
     return jsonify({"success": True, "message": "Profile updated"}), 200
 
 
@@ -104,7 +111,7 @@ def change_password():
     if not current_user.check_password(old_password):
         return jsonify({"error": "Old password is incorrect"}), 401
 
-    # ✅ Re-hash and update password
+    # Re-hash and update password
     current_user.password_hash = User.hash_password(new_password).decode('utf-8')
     current_user.save()
 
