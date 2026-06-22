@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, createContext, useContext, useMemo } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { BottomPlayer } from './components/BottomPlayer'
 import { HomePage } from './components/HomePage'
-import { ArtistsPage } from './components/ArtistsPage'
+import { ArtistsPage, artistsList } from './components/ArtistsPage'
 import { LibraryPage } from './components/LibraryPage'
 import { AlbumsPage } from './components/AlbumsPage'
 import { RadioPage } from './components/RadioPage'
@@ -10,6 +10,7 @@ import { PlaylistPage } from './components/PlaylistPage'
 import { ChartDetailPage } from './components/ChartDetailPage'
 import { AuthModal } from './components/AuthModal'
 import { LyricsView } from './components/LyricsView'
+import { NowPlayingPanel } from './components/NowPlayingPanel'
 
 import defaultCover from 'figma:asset/d3b57b756182091c9c0eebb36cff4c1f36c5fc0f.png'
 
@@ -48,7 +49,34 @@ export interface Playlist {
   id: string
   name: string
   songs: string[]
+  cover_url?: string
 }
+
+export interface AppContextType {
+  likedTrackIds: string[];
+  likedTracks: Track[];
+  playlists: Playlist[];
+  followedArtistIds: string[];
+  handleToggleLike: (trackId: string, trackObj?: Track) => Promise<void>;
+  handleCreatePlaylistAndAdd: (name: string, songId: string) => Promise<void>;
+  handleAddSongToPlaylist: (playlistId: string, songId: string) => Promise<void>;
+  handleRemoveSongFromPlaylist: (playlistId: string, songId: string) => Promise<void>;
+  handleGeneratePlaylistCover: (playlistId: string) => Promise<void>;
+  handlePlayTrack: (track: Track, customQueue?: Track[]) => Promise<void>;
+  currentTrack: Track;
+  isPlaying: boolean;
+  onNavigate: (targetPage: string, artistId?: string | null, albumId?: string | null) => void;
+}
+
+export const AppContext = createContext<AppContextType | null>(null);
+
+export const useAppContext = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useAppContext must be used within AppContext.Provider');
+  }
+  return context;
+};
 
 const SearchIcon = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -122,6 +150,7 @@ export default function App() {
   const [lyrics, setLyrics] = useState<LyricLine[]>([])
   const [activeLyricIdx, setActiveLyricIdx] = useState(-1)
   const [showLyrics, setShowLyrics] = useState(false)
+  const [showNowPlaying, setShowNowPlaying] = useState(false)
   const [lyricsHasSync, setLyricsHasSync] = useState(false)
   const rafRef = useRef<number | null>(null)
   
@@ -131,8 +160,8 @@ export default function App() {
 
   // Auth lists
   const [likedTrackIds, setLikedTrackIds] = useState<string[]>([])
+  const [likedTracks, setLikedTracks] = useState<Track[]>([])
   const [playlists, setPlaylists] = useState<Playlist[]>([])
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   
   // Recently Played state
   const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(() => {
@@ -157,6 +186,19 @@ export default function App() {
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
+  const matchingArtists = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    return artistsList.filter(artist => {
+      const cleanQuery = searchQuery.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9]/g, '');
+      const cleanName = artist.name.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9]/g, '');
+      const cleanGenre = artist.genre.toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      return artist.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        artist.genre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (cleanQuery.length > 0 && (cleanName.includes(cleanQuery) || cleanGenre.includes(cleanQuery)));
+    })
+  }, [searchQuery])
+
   // Debounced search query for typeahead dropdown
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -165,6 +207,9 @@ export default function App() {
       return
     }
 
+    // Instantly show dropdown for local artist matches
+    setShowDropdown(true)
+
     const delayDebounce = setTimeout(async () => {
       setSearching(true)
       try {
@@ -172,7 +217,6 @@ export default function App() {
         if (res.ok) {
           const data = await res.json()
           setSearchResults(data.results || [])
-          setShowDropdown(true)
         }
       } catch (err) {
         console.error('Search error:', err)
@@ -210,11 +254,28 @@ export default function App() {
     setPage('home')
   }
 
-  const handleNavigate = (targetPage: string, artistId: string | null = null, albumId: string | null = null) => {
+  const handleNavigate = useCallback((targetPage: string, artistId: string | null = null, albumId: string | null = null) => {
     setActiveArtistId(artistId)
     setActiveAlbumId(albumId)
     setPage(targetPage)
-  }
+  }, [])
+
+  const handleNavigateArtistByName = useCallback((artistName: string) => {
+    // 1. Look for a local artist whose normalized name matches the normalized artistName
+    const cleanTarget = artistName.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9]/g, '');
+    const matchedLocal = artistsList.find(artist => {
+      const cleanLocalName = artist.name.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9]/g, '');
+      return cleanLocalName === cleanTarget;
+    });
+
+    if (matchedLocal) {
+      handleNavigate('artists', matchedLocal.id)
+    } else {
+      // 2. Otherwise generate a dynamic slug, replacing non-alphanumeric with hyphens
+      const artistId = artistName.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      handleNavigate('artists', artistId)
+    }
+  }, [handleNavigate])
 
   // Audio refs
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -257,6 +318,7 @@ export default function App() {
       if (resLikes.ok) {
         const dataLikes = await resLikes.json();
         setLikedTrackIds(dataLikes.liked_songs || []);
+        setLikedTracks(dataLikes.liked_songs_metadata || []);
       }
 
       const resFollowed = await fetch('/api/user/followed-artists');
@@ -353,7 +415,11 @@ export default function App() {
 
     const handleTimeUpdate = () => {
       if (audioRef.current && !isYouTubeTrack(currentTrack)) {
-        setCurrentTime(Math.floor(audioRef.current.currentTime));
+        if (audioRef.current.readyState < 2) return;
+        const audioTime = audioRef.current.currentTime;
+        if (audioTime > 0 || !audioRef.current.paused) {
+          setCurrentTime(Math.floor(audioTime));
+        }
       }
     };
 
@@ -629,26 +695,55 @@ export default function App() {
   }, [isPlaying, lyrics, lyricsHasSync, syncLyrics]);
 
   // Liked tracks and playlist CRUD sync
-  const handleToggleLike = async (trackId: string) => {
+  const handleToggleLike = async (trackId: string, trackObj?: Track) => {
     const isLiked = likedTrackIds.includes(trackId);
     const action = isLiked ? 'remove' : 'add';
 
+    // Optimistic Update
     setLikedTrackIds(prev =>
       isLiked ? prev.filter(id => id !== trackId) : [...prev, trackId]
     );
+    if (isLiked) {
+      setLikedTracks(prev => prev.filter(t => t.id !== trackId));
+    } else {
+      const foundTrack = trackObj || tracks.find(t => t.id === trackId) || (currentTrack?.id === trackId ? currentTrack : undefined);
+      if (foundTrack && foundTrack.id === trackId) {
+        setLikedTracks(prev => [...prev, foundTrack]);
+      }
+    }
 
     try {
+      const payloadTrack = trackObj || tracks.find(t => t.id === trackId) || (currentTrack?.id === trackId ? currentTrack : undefined);
       const response = await fetch('/api/user/liked-songs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ song_id: trackId, action }),
+        body: JSON.stringify({ 
+          song_id: trackId, 
+          action,
+          track: payloadTrack
+        }),
       });
       if (response.ok) {
         const data = await response.json();
         setLikedTrackIds(data.liked_songs || []);
+        setLikedTracks(data.liked_songs_metadata || []);
+      } else {
+        throw new Error('Server error');
       }
     } catch (err) {
       console.error('Failed to toggle like:', err);
+      // Rollback
+      if (isLiked) {
+        setLikedTrackIds(prev => [...prev, trackId]);
+        const foundTrack = trackObj || tracks.find(t => t.id === trackId) || (currentTrack?.id === trackId ? currentTrack : undefined);
+        if (foundTrack && foundTrack.id === trackId) {
+          setLikedTracks(prev => [...prev, foundTrack]);
+        }
+      } else {
+        setLikedTrackIds(prev => prev.filter(id => id !== trackId));
+        setLikedTracks(prev => prev.filter(t => t.id !== trackId));
+      }
+      throw err;
     }
   };
 
@@ -686,8 +781,11 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.success) {
+        if (data.success && data.playlist) {
           setPlaylists(prev => [...prev, data.playlist]);
+          if (data.playlist.id) {
+            handleGeneratePlaylistCover(data.playlist.id);
+          }
         }
       }
     } catch (err) {
@@ -761,6 +859,97 @@ export default function App() {
     }
   };
 
+  const handleGeneratePlaylistCover = async (playlistId: string) => {
+    try {
+      const res = await fetch(`/api/playlists/${playlistId}/generate-cover`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.cover_url) {
+          setPlaylists(prev =>
+            prev.map(p => (p.id === playlistId ? { ...p, cover_url: data.cover_url } : p))
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate playlist cover:', err);
+    }
+  };
+
+  const handleCreatePlaylistAndAdd = async (name: string, songId: string) => {
+    let createdPlaylistId: string | null = null;
+    try {
+      const res = await fetch('/api/playlists/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to create playlist');
+      }
+      const data = await res.json();
+      if (!data.success || !data.playlist?.id) {
+        throw new Error('Failed to create playlist');
+      }
+      
+      const newPlaylist = data.playlist;
+      createdPlaylistId = newPlaylist.id;
+
+      const resAdd = await fetch(`/api/playlists/${createdPlaylistId}/songs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song_id: songId }),
+      });
+      if (!resAdd.ok) {
+        throw new Error('Failed to add song to the new playlist');
+      }
+
+      setPlaylists(prev => [...prev, { ...newPlaylist, songs: [songId] }]);
+      handleGeneratePlaylistCover(newPlaylist.id);
+    } catch (err) {
+      console.error('handleCreatePlaylistAndAdd error:', err);
+      if (createdPlaylistId) {
+        try {
+          await fetch(`/api/playlists/${createdPlaylistId}`, { method: 'DELETE' });
+        } catch (cleanupErr) {
+          console.error('Failed to clean up orphaned playlist:', cleanupErr);
+        }
+      }
+      throw err;
+    }
+  };
+
+  const contextValue = useMemo(() => ({
+    likedTrackIds,
+    likedTracks,
+    playlists,
+    followedArtistIds,
+    handleToggleLike,
+    handleCreatePlaylistAndAdd,
+    handleAddSongToPlaylist,
+    handleRemoveSongFromPlaylist,
+    handleGeneratePlaylistCover,
+    handlePlayTrack,
+    currentTrack,
+    isPlaying,
+    onNavigate: handleNavigate
+  }), [
+    likedTrackIds,
+    likedTracks,
+    playlists,
+    followedArtistIds,
+    handleToggleLike,
+    handleCreatePlaylistAndAdd,
+    handleAddSongToPlaylist,
+    handleRemoveSongFromPlaylist,
+    handleGeneratePlaylistCover,
+    handlePlayTrack,
+    currentTrack,
+    isPlaying,
+    handleNavigate
+  ]);
+
   const renderPageContent = () => {
     // Custom chart details
     if (page.startsWith('chart:')) {
@@ -803,6 +992,7 @@ export default function App() {
           playlistId={playlistId}
           title={playlist.name}
           description="Your custom premium playlist workspace."
+          coverUrl={playlist.cover_url}
           onPlayTrack={handlePlayTrack}
           currentTrack={currentTrack}
           likedTrackIds={likedTrackIds}
@@ -897,7 +1087,7 @@ export default function App() {
             currentTrack={currentTrack}
             likedTrackIds={likedTrackIds}
             onToggleLike={handleToggleLike}
-            playlistTracks={tracks.filter(t => likedTrackIds.includes(t.id))}
+            playlistTracks={likedTracks}
           />
         )
       default:
@@ -943,10 +1133,11 @@ export default function App() {
   }
 
   return (
-    <div
-      className="flex h-screen overflow-hidden"
-      style={{ fontFamily: 'var(--font-sans)', background: '#0a0a0b', minWidth: 'auto' }}
-    >
+    <AppContext.Provider value={contextValue}>
+      <div
+        className="flex h-screen overflow-hidden"
+        style={{ fontFamily: 'Inter, sans-serif', background: '#0f0f10', minWidth: 'auto' }}
+      >
       {/* Left Sidebar */}
       <Sidebar 
         currentPage={page} 
@@ -954,32 +1145,18 @@ export default function App() {
         playlists={playlists}
         onCreatePlaylist={handleCreatePlaylist}
         allTracks={tracks}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
       />
 
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Global Search Header Bar */}
-        <div className="flex items-center justify-between px-4 md:px-8 pt-6 pb-4 flex-shrink-0 z-30 gap-4">
-          <div className="flex items-center gap-2 md:gap-4 flex-1">
-            {/* Hamburger menu button on mobile */}
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="md:hidden text-white p-2 hover:bg-white/5 rounded-full flex-shrink-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              title="Open Menu"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-
+        <div className="flex items-center justify-between px-8 pt-6 pb-4 flex-shrink-0 z-30 gap-4">
+          <div className="flex items-center gap-4 flex-1">
             {/* Home button directly before the search bar */}
             <button
               onClick={handleClearSearch}
-              className="opacity-70 hover:opacity-100 hover:scale-105 transition-all duration-150 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              style={{ width: 44, height: 44 }}
+              className="opacity-65 hover:opacity-100 transition-opacity flex-shrink-0"
+              style={{ cursor: 'pointer' }}
               title="Go to Home"
             >
               <svg width="18" height="18" viewBox="0 0 16 18" fill="none">
@@ -990,8 +1167,8 @@ export default function App() {
             {/* Search Input Container */}
             <div ref={searchContainerRef} className="relative flex-1 max-w-[800px]">
               <div
-                className="flex items-center gap-4 px-4 py-2.5 rounded-full w-full transition-all duration-200 border focus-within:border-[var(--primary)] focus-within:scale-[1.01] focus-within:shadow-[0_0_15px_rgba(212,245,0,0.15)] focus-within:outline-none"
-                style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.06)' }}
+                className="flex items-center gap-4 px-4 py-3 rounded-full w-full"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.05)' }}
               >
                 <SearchIcon />
                 <input
@@ -1005,13 +1182,13 @@ export default function App() {
                     }
                   }}
                   onKeyDown={handleKeyDown}
-                  className="bg-transparent text-white border-none outline-none w-full text-sm"
-                  style={{ fontFamily: 'var(--font-sans)', fontWeight: 400 }}
+                  className="bg-transparent text-white border-none outline-none w-full"
+                  style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 14 }}
                 />
                 {searchQuery && (
                   <button
                     onClick={handleClearSearch}
-                    className="text-stone-400 hover:text-white text-xs px-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                    className="text-stone-400 hover:text-white text-xs px-2"
                   >
                     ✕
                   </button>
@@ -1019,7 +1196,7 @@ export default function App() {
               </div>
 
               {/* Typeahead Dropdown */}
-              {showDropdown && searchResults.length > 0 && (
+              {showDropdown && (searchResults.length > 0 || matchingArtists.length > 0) && (
                 <div
                   style={{
                     position: 'absolute',
@@ -1027,43 +1204,77 @@ export default function App() {
                     left: 0,
                     right: 0,
                     marginTop: 8,
-                    background: '#16161A',
+                    background: '#18181b',
                     borderRadius: 16,
-                    border: 'var(--glass-border)',
+                    border: '1px solid rgba(255,255,255,0.08)',
                     boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
-                    maxHeight: 320,
+                    maxHeight: 360,
                     overflowY: 'auto',
                     zIndex: 50,
                     padding: '8px 0',
                   }}
                 >
-                  {searchResults.slice(0, 5).map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => {
-                        handlePlayTrack(item, searchResults)
-                        setShowDropdown(false)
-                      }}
-                      className="flex items-center gap-3 px-4 py-2 hover:bg-white/5 cursor-pointer transition-colors"
-                    >
-                      <img
-                        src={item.cover}
-                        alt=""
-                        className="w-10 h-10 rounded-md object-cover flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white text-sm font-semibold truncate" dangerouslySetInnerHTML={{ __html: item.title }} />
-                        <div className="text-stone-400 text-xs truncate">{item.artist}</div>
-                      </div>
+                  {/* Matching Artists Section in Dropdown */}
+                  {matchingArtists.length > 0 && (
+                    <div className="px-2 pb-2">
+                      <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest px-2 py-1.5">Artists</div>
+                      {matchingArtists.slice(0, 3).map((artistItem) => (
+                        <div
+                          key={artistItem.id}
+                          onClick={() => {
+                            handleNavigate('artists', artistItem.id, null)
+                            setShowDropdown(false)
+                          }}
+                          className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+                        >
+                          <img
+                            src={artistItem.cover}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-white/10"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white text-xs font-bold truncate">{artistItem.name}</div>
+                            <div className="text-stone-400 text-[10px] truncate">{artistItem.genre.split('/')[0]} • Artist</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+
+                  {/* Matching Songs Section in Dropdown */}
+                  {searchResults.length > 0 && (
+                    <div className="px-2">
+                      <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest px-2 py-1.5 border-t border-white/5 mt-1.5">Songs</div>
+                      {searchResults.slice(0, 5).map((item) => (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            handlePlayTrack(item, searchResults)
+                            setShowDropdown(false)
+                          }}
+                          className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+                        >
+                          <img
+                            src={item.cover}
+                            alt=""
+                            className="w-8 h-8 rounded-md object-cover flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white text-xs font-semibold truncate" dangerouslySetInnerHTML={{ __html: item.title }} />
+                            <div className="text-stone-400 text-[10px] truncate">{item.artist}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div
                     onClick={() => {
                       setIsSearchSubmitted(true)
                       setShowDropdown(false)
                     }}
                     className="text-center py-2 text-xs font-bold border-t border-white/5 mt-1 cursor-pointer transition-colors"
-                    style={{ color: 'var(--primary)' }}
+                    style={{ color: '#E2FB5E' }}
                   >
                     Press Enter to see all results
                   </div>
@@ -1075,9 +1286,9 @@ export default function App() {
             <div className="flex items-center gap-1 p-1 rounded-full bg-white/5 border border-white/10 flex-shrink-0">
               <button
                 onClick={() => setSearchMode('saavn')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
                   searchMode === 'saavn'
-                    ? 'bg-[var(--primary)] text-black shadow-md'
+                    ? 'bg-[#E2FB5E] text-black shadow-md'
                     : 'text-stone-400 hover:text-white'
                 }`}
               >
@@ -1085,9 +1296,9 @@ export default function App() {
               </button>
               <button
                 onClick={() => setSearchMode('youtube')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
                   searchMode === 'youtube'
-                    ? 'bg-[var(--primary)] text-black shadow-md'
+                    ? 'bg-[#E2FB5E] text-black shadow-md'
                     : 'text-stone-400 hover:text-white'
                 }`}
               >
@@ -1096,40 +1307,18 @@ export default function App() {
             </div>
           </div>
             
-          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
-            <button 
-              className="opacity-70 hover:opacity-100 transition-all duration-150 hover:scale-105 hover:bg-white/5 rounded-full flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              style={{ width: 44, height: 44 }}
-              title="Tickets"
-            >
-              <TicketIcon />
-            </button>
-            <button 
-              className="opacity-70 hover:opacity-100 transition-all duration-150 hover:scale-105 hover:bg-white/5 rounded-full flex items-center justify-center relative focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              style={{ width: 44, height: 44 }}
-              title="Notifications"
-            >
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <button className="opacity-60 hover:opacity-100 transition-opacity"><TicketIcon /></button>
+            <button className="opacity-60 hover:opacity-100 transition-opacity relative">
               <BellIcon />
-              <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-[var(--primary)] border border-[#0a0a0b] animate-pulse" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E2FB5E] border-2 border-[#0f0f10]" />
             </button>
-            <button 
-              className="opacity-70 hover:opacity-100 transition-all duration-150 hover:scale-105 hover:bg-white/5 rounded-full flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              style={{ width: 44, height: 44 }}
-              title="Settings"
-            >
-              <SettingsIcon />
-            </button>
-            <button
-              className="hover:scale-105 transition-transform rounded-full overflow-hidden border border-white/10 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
-              style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-              title="Profile"
-            >
-              <img 
-                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80" 
-                alt="Profile"
-                className="w-full h-full object-cover"
-              />
-            </button>
+            <button className="opacity-60 hover:opacity-100 transition-opacity"><SettingsIcon /></button>
+            <img 
+              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80" 
+              alt="Profile"
+              className="w-8 h-8 rounded-full object-cover border border-white/10 flex-shrink-0"
+            />
           </div>
         </div>
 
@@ -1154,6 +1343,53 @@ export default function App() {
                   Back to Home
                 </button>
               </div>
+
+              {/* Artists Search Shelf */}
+              {matchingArtists.length > 0 && (
+                <div className="mb-10">
+                  <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
+                    Artists
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                    {matchingArtists.map((artistItem) => (
+                      <div
+                        key={artistItem.id}
+                        onClick={() => {
+                          handleNavigate('artists', artistItem.id, null);
+                          setIsSearchSubmitted(false);
+                        }}
+                        className="group relative rounded-[20px] p-4 transition-all duration-300 cursor-pointer flex flex-col hover:bg-white/[0.04] border border-transparent hover:border-white/5 bg-white/[0.01]"
+                      >
+                        <div className="relative aspect-square w-full rounded-2xl overflow-hidden mb-4 border border-white/5">
+                          <img
+                            src={artistItem.cover}
+                            alt={artistItem.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 opacity-0 group-hover:opacity-30 transition-opacity duration-300" style={{ background: 'radial-gradient(circle, var(--primary) 0%, transparent 70%)' }} />
+                          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-full bg-[#E2FB5E] flex items-center justify-center text-black font-bold transform translate-y-3 group-hover:translate-y-0 transition-all duration-300 hover:scale-110">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-white text-[14px] font-bold truncate group-hover:text-[#E2FB5E] transition-colors mb-1">
+                            {artistItem.name}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-stone-400 text-[11px] font-medium uppercase tracking-wider mb-0.5">
+                            <span className="truncate">{artistItem.genre.split('/')[0].trim()}</span>
+                          </div>
+                          <span className="text-stone-500 text-[10px] font-semibold">{artistItem.monthlyListeners} Listeners</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Main Spotify double column */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
@@ -1336,8 +1572,36 @@ export default function App() {
           showLyrics={showLyrics}
           onToggleLyrics={() => setShowLyrics(v => !v)}
           hasLyrics={lyrics.length > 0}
+          showNowPlaying={showNowPlaying}
+          onToggleNowPlaying={() => setShowNowPlaying(v => !v)}
+          onNavigateArtist={handleNavigateArtistByName}
         />
       </div>
+
+      {/* Now Playing Side Panel */}
+      {showNowPlaying && (
+        <NowPlayingPanel
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          onTogglePlay={handleTogglePlay}
+          currentTime={currentTime}
+          duration={duration}
+          onSeek={handleSeek}
+          isShuffle={isShuffle}
+          onToggleShuffle={() => setIsShuffle(!isShuffle)}
+          isRepeat={isRepeat}
+          onToggleRepeat={() => setIsRepeat(!isRepeat)}
+          onNext={handleNextTrack}
+          onPrev={handlePrevTrack}
+          lyrics={lyrics}
+          activeLyricIdx={activeLyricIdx}
+          queue={queue}
+          queueIndex={queueIndex}
+          onPlayTrackFromQueue={handlePlayTrack}
+          onClose={() => setShowNowPlaying(false)}
+          onNavigateArtist={handleNavigateArtistByName}
+        />
+      )}
 
       {/* Lyrics overlay */}
       {showLyrics && (
@@ -1350,5 +1614,6 @@ export default function App() {
         />
       )}
     </div>
+    </AppContext.Provider>
   )
 }

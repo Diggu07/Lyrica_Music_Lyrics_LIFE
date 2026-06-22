@@ -155,10 +155,8 @@ export function HomePage({
   // Get upcoming tracks from the real queue
   const nextInQueue = queue.slice(queueIndex + 1, queueIndex + 4)
 
-  // Fallback to trending songs if recentlyPlayed is empty to keep home page populated
-  const displayRecentlyPlayed = (recentlyPlayed && recentlyPlayed.length > 0)
-    ? recentlyPlayed
-    : allTracks.slice(0, 4)
+  // Only display Recently Played if the user has actually played songs
+  const displayRecentlyPlayed = recentlyPlayed || []
 
   return (
     <div className="flex h-full overflow-hidden" style={{ background: 'var(--background)' }}>
@@ -487,72 +485,6 @@ export function HomePage({
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Now Playing Panel (Dynamic Sidebar) */}
-      <div
-        className="flex-shrink-0 flex flex-col overflow-hidden"
-        style={{
-          width: 309,
-          margin: '12px 13px 12px 0',
-          borderRadius: 20,
-          background: 'rgba(22, 22, 26, 0.4)',
-          backdropFilter: 'blur(12px)',
-          borderLeft: '1px solid var(--border)',
-        }}
-      >
-        <div className="flex flex-col h-full px-8 py-10 overflow-y-auto">
-          {/* Header */}
-          <div className="mb-8 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
-            <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 11, color: 'var(--text-muted)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Now Playing</span>
-          </div>
- 
-          {/* Album art */}
-          <div className="w-full mb-8 rounded-[24px] overflow-hidden" style={{ aspectRatio: '1', border: '1px solid var(--border)', boxShadow: '0px 25px 50px -12px rgba(0,0,0,0.5)' }}>
-            <img src={currentTrack.cover || imgNowPlaying} alt="now playing" className="w-full h-full object-cover" />
-          </div>
- 
-          {/* Track info */}
-          <div className="flex flex-col gap-2 mb-8">
-            <div style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontWeight: 400, fontSize: 24, color: 'var(--text)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentTrack.title}</div>
-            <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>{currentTrack.artist}</div>
-          </div>
- 
-          {/* Queue */}
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Next in queue</span>
-              <button onClick={() => onNavigate('daily-mix')}>
-                <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 11, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Show all</span>
-              </button>
-            </div>
- 
-            {/* Queue tracks */}
-            <div className="flex flex-col gap-4">
-              {nextInQueue.length > 0 ? (
-                nextInQueue.map((track) => (
-                  <div
-                    key={track.id}
-                    onClick={() => onPlayTrack(track, queue)}
-                    className="flex items-center gap-4 cursor-pointer hover:bg-white/5 p-1 rounded-lg transition-colors"
-                  >
-                    <div className="rounded-[12px] overflow-hidden flex-shrink-0" style={{ width: 48, height: 48, border: '1px solid var(--border)' }}>
-                      <img src={track.cover} alt="" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="truncate" style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{track.title}</span>
-                      <span className="truncate text-stone-500 text-xs" style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, color: 'var(--text-muted)' }}>{track.artist}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-stone-600 text-xs italic py-4" style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-muted)' }}>
-                  Queue is empty. Select a playlist or album to queue songs!
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </div>

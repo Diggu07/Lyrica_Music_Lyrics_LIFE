@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Track } from '../App'
+import { PlaylistPopover } from './PlaylistPopover'
 
 interface ChartDetailPageProps {
   chartType: string
@@ -76,11 +77,12 @@ export function ChartDetailPage({
   }, [chartType, language])
 
   const getChartTitle = () => {
-    if (chartType === 'worldwide') return 'Worldwide Hot 50'
+    const count = tracks.length || 50
+    if (chartType === 'worldwide') return `Worldwide Hot ${count}`
     if (chartType === 'asia') return 'Asia Top Hits'
-    if (chartType === 'india') return 'India Superhits Top 50'
+    if (chartType === 'india') return `India Superhits Top ${count}`
     if (chartType === 'language') {
-      return `${language.charAt(0).toUpperCase() + language.slice(1)} Trending Charts`
+      return `${language.charAt(0).toUpperCase() + language.slice(1)} Top ${count}`
     }
     return 'Top Chart'
   }
@@ -298,12 +300,9 @@ export function ChartDetailPage({
                         <div className="flex items-center justify-end gap-3">
                           {isPlayable ? (
                             <>
-                              <button
-                                onClick={() => onToggleLike(track.id)}
-                                className="opacity-0 group-hover:opacity-100 hover:scale-105 transition-all p-1"
-                              >
-                                {isLiked ? <HeartFilledIcon /> : <HeartOutlineIcon />}
-                              </button>
+                              <div className="opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                                <PlaylistPopover track={track} />
+                              </div>
                               <button
                                 onClick={() => onPlayTrack(track, playableTracks)}
                                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${

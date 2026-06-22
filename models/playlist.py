@@ -17,7 +17,7 @@ class Playlist:
         self.collection = get_db()['playlists']
 
     def create_playlist(self, user_id, name):
-        playlist = {"user_id": user_id, "name": name, "songs": []}
+        playlist = {"user_id": user_id, "name": name, "songs": [], "cover_url": None}
         return self.collection.insert_one(playlist).inserted_id
 
     def get_playlists_by_user(self, user_id):
@@ -42,4 +42,10 @@ class Playlist:
         return self.collection.update_one(
             {"_id": ObjectId(playlist_id)},
             {"$set": {"name": new_name}}
+        )
+
+    def update_cover_url(self, playlist_id, cover_url):
+        return self.collection.update_one(
+            {"_id": ObjectId(playlist_id)},
+            {"$set": {"cover_url": cover_url}}
         )

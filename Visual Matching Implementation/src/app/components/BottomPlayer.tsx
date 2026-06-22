@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Track } from '../App'
+import { PlaylistPopover } from './PlaylistPopover'
 
 const ShuffleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -82,7 +83,11 @@ interface BottomPlayerProps {
   showLyrics: boolean
   onToggleLyrics: () => void
   hasLyrics: boolean
+  showNowPlaying?: boolean
+  onToggleNowPlaying?: () => void
+  onNavigateArtist?: (artistName: string) => void
 }
+
 
 const formatTime = (secs: number) => {
   if (isNaN(secs) || secs === Infinity) return '0:00';
@@ -91,13 +96,12 @@ const formatTime = (secs: number) => {
   return `${m}:${s}`;
 }
 
-// Waveform bar heights (32 bars total)
 const WAVEFORM_HEIGHTS = [
-  30, 45, 60, 25, 40, 75, 50, 60,
-  35, 20, 45, 80, 55, 70, 40, 25,
-  50, 90, 65, 30, 45, 60, 25, 40,
-  75, 50, 60, 35, 20, 45, 60, 30
-]
+  12, 18, 14, 22, 10, 16, 24, 20, 12, 8,
+  14, 20, 26, 18, 12, 10, 16, 22, 14, 18,
+  20, 24, 16, 10, 14, 22, 18, 12, 8, 16,
+  20, 26, 14, 12, 18, 22, 10, 14, 20, 12
+];
 
 export function BottomPlayer({
   currentTrack,
@@ -119,17 +123,12 @@ export function BottomPlayer({
   showLyrics,
   onToggleLyrics,
   hasLyrics,
+  showNowPlaying,
+  onToggleNowPlaying,
+  onNavigateArtist,
 }: BottomPlayerProps) {
   const titleRef = useRef<HTMLSpanElement>(null);
-  const scrubberRef = useRef<HTMLDivElement>(null);
-  const volumeRef = useRef<HTMLDivElement>(null);
-
   const [isOverflowing, setIsOverflowing] = useState(false);
-  const [hoverTime, setHoverTime] = useState<number | null>(null);
-  const [hoverX, setHoverX] = useState<number>(0);
-  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
-  const [isDraggingVolume, setIsDraggingVolume] = useState(false);
-  const [isMobileExpanded, setIsMobileExpanded] = useState(false);
 
   useEffect(() => {
     if (titleRef.current) {
@@ -137,492 +136,308 @@ export function BottomPlayer({
     }
   }, [currentTrack.title]);
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  // Waveform state & mouse drag seeking
+  const [isDragging, setIsDragging] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const [tooltipX, setTooltipX] = useState(0);
+  const [hoverTime, setHoverTime] = useState(0);
+  const waveformRef = useRef<HTMLDivElement>(null);
 
-  const seekFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!scrubberRef.current || duration <= 0) return;
-    const rect = scrubberRef.current.getBoundingClientRect();
+  const progressFraction = duration > 0 ? currentTime / duration : 0;
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(true);
+    const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const fraction = Math.max(0, Math.min(1, clickX / rect.width));
     onSeek(fraction * duration);
   };
 
-  const handleProgressPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    setIsDraggingProgress(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    seekFromPointer(e);
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    setTooltipX(x);
+    const fraction = Math.max(0, Math.min(1, x / rect.width));
+    setHoverTime(fraction * duration);
   };
 
-  const handleProgressPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDraggingProgress) {
-      seekFromPointer(e);
+  useEffect(() => {
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !waveformRef.current) return;
+      const rect = waveformRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const fraction = Math.max(0, Math.min(1, clickX / rect.width));
+      onSeek(fraction * duration);
+    };
+    const handleWindowMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      window.addEventListener('mousemove', handleWindowMouseMove);
+      window.addEventListener('mouseup', handleWindowMouseUp);
     }
-    // Update hover preview coordinates
-    if (scrubberRef.current && duration > 0) {
-      const rect = scrubberRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const fraction = Math.max(0, Math.min(1, x / rect.width));
-      setHoverTime(fraction * duration);
-      setHoverX(x);
-    }
-  };
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isDragging, duration, onSeek]);
 
-  const handleProgressPointerUp = () => {
-    setIsDraggingProgress(false);
-  };
+  // Volume slider state & mouse drag volume control
+  const [isDraggingVolume, setIsDraggingVolume] = useState(false);
+  const volumeRef = useRef<HTMLDivElement>(null);
 
-  const volumeFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!volumeRef.current) return;
-    const rect = volumeRef.current.getBoundingClientRect();
+  const handleVolumeMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDraggingVolume(true);
+    const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const vol = Math.max(0, Math.min(1, clickX / rect.width));
     onVolumeChange(vol);
   };
 
-  const handleVolumePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    setIsDraggingVolume(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    volumeFromPointer(e);
-  };
+  useEffect(() => {
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!isDraggingVolume || !volumeRef.current) return;
+      const rect = volumeRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const vol = Math.max(0, Math.min(1, clickX / rect.width));
+      onVolumeChange(vol);
+    };
+    const handleWindowMouseUp = () => {
+      setIsDraggingVolume(false);
+    };
 
-  const handleVolumePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isDraggingVolume) {
-      volumeFromPointer(e);
+      window.addEventListener('mousemove', handleWindowMouseMove);
+      window.addEventListener('mouseup', handleWindowMouseUp);
     }
-  };
-
-  const handleVolumePointerUp = () => {
-    setIsDraggingVolume(false);
-  };
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isDraggingVolume, onVolumeChange]);
 
   return (
-    <>
-      {/* Mobile Collapsed Player (Bottom floating bar) - visible only below 768px (md) */}
-      <div 
-        onClick={() => setIsMobileExpanded(true)}
-        className="md:hidden fixed bottom-4 left-4 right-4 z-40 flex items-center justify-between px-4 py-2 cursor-pointer transition-all hover:scale-[1.01]"
-        style={{
-          height: 64,
-          background: 'var(--glass-bg)',
-          backdropFilter: 'var(--glass-blur)',
-          border: 'var(--glass-border)',
-          borderRadius: 16,
-          boxShadow: '0 12px 24px rgba(0, 0, 0, 0.5)',
-        }}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border border-white/10">
-            <img src={currentTrack.cover} alt="cover" className="w-full h-full object-cover" />
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="font-sans font-bold text-xs text-white truncate">{currentTrack.title}</span>
-            <span className="font-sans text-[10px] text-stone-400 truncate">{currentTrack.artist}</span>
-          </div>
+    <div
+      className="flex-shrink-0 flex items-center px-6 gap-6 relative"
+      style={{
+        height: 88,
+        background: 'rgba(22, 22, 26, 0.75)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid var(--border)',
+        borderRadius: '9999px',
+        margin: '0 24px 24px 24px',
+        boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.6)',
+      }}
+    >
+      {/* Track info */}
+      <div className="flex items-center gap-3" style={{ width: 240 }}>
+        <div className="rounded-full overflow-hidden flex-shrink-0" style={{ width: 44, height: 44, border: '1px solid var(--border)' }}>
+          <img src={currentTrack.cover} alt="cover" className="w-full h-full object-cover" />
         </div>
-
-        <div className="flex items-center gap-2">
-          {/* Heart Like Action */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleLike()
-            }}
-            className="flex items-center justify-center text-stone-300 hover:text-white"
-            style={{ width: 44, height: 44 }}
+        <div className="flex items-end gap-[3px] h-4 w-4 justify-center flex-shrink-0">
+          <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} />
+          <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} />
+          <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} />
+        </div>
+        <div className="flex flex-col min-w-0 flex-1">
+          <div className="player-title-marquee">
+            <span
+              ref={titleRef}
+              className={`player-title-text block truncate ${isOverflowing ? 'overflow-scroll-hover' : ''}`}
+              style={{ fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 13, color: 'var(--text)', letterSpacing: '0.2px' }}
+            >
+              {currentTrack.title}
+            </span>
+          </div>
+          <span
+            onClick={() => onNavigateArtist && onNavigateArtist(currentTrack.artist)}
+            className="truncate hover:text-white cursor-pointer transition-colors"
+            style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 11, color: 'var(--text-muted)' }}
           >
-            {isLiked ? <HeartFilledIcon /> : <HeartOutlineIcon />}
+            {currentTrack.artist}
+          </span>
+        </div>
+      </div>
+
+      {/* Center controls */}
+      <div className="flex-1 flex flex-col items-center gap-2">
+        {/* Buttons */}
+        <div className="flex items-center gap-[14px]">
+          <button 
+            onClick={onToggleShuffle}
+            aria-label="Shuffle"
+            className="flex items-center justify-center w-9 h-9 rounded-[12px] bg-transparent text-white hover:bg-[rgba(255,255,255,0.08)] focus-visible:bg-[rgba(255,255,255,0.08)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#121214] outline-none transition-all duration-150 ease-out"
+            style={{ opacity: isShuffle ? 1 : 0.4 }}
+          >
+            <ShuffleIcon />
           </button>
-          
-          {/* Play/Pause Action */}
+          <button 
+            onClick={onPrev}
+            aria-label="Previous"
+            className="flex items-center justify-center w-9 h-9 rounded-[12px] bg-transparent text-white hover:bg-[rgba(255,255,255,0.08)] focus-visible:bg-[rgba(255,255,255,0.08)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#121214] outline-none transition-all duration-150 ease-out opacity-80 hover:opacity-100 focus-visible:opacity-100"
+          >
+            <PrevIcon />
+          </button>
+          {/* Play/Pause Button */}
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onTogglePlay()
-            }}
-            className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 bg-[var(--primary)] text-black focus:outline-none play-btn ${isPlaying ? 'playing' : ''}`}
+            onClick={onTogglePlay}
+            aria-label="Play/Pause"
+            className="flex items-center justify-center w-[44px] h-[44px] rounded-[14px] flex-shrink-0 hover:scale-105 focus-visible:scale-105 focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#121214] outline-none transition-all duration-150 play-btn"
+            style={{ background: 'var(--primary)', width: 44, height: 44 }}
           >
             {isPlaying ? (
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                <rect x="3" y="2" width="2.5" height="10" rx="1.25" fill="black" />
-                <rect x="8.5" y="2" width="2.5" height="10" rx="1.25" fill="black" />
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <rect x="3" y="2" width="2.5" height="10" rx="1.25" fill="var(--background)" />
+                <rect x="8.5" y="2" width="2.5" height="10" rx="1.25" fill="var(--background)" />
               </svg>
             ) : (
-              <svg width="10" height="12" viewBox="0 0 11 14" fill="none" className="ml-[1px]">
-                <path d="M1.5 12.25V1.75L9.25 7L1.5 12.25Z" fill="black" stroke="black" strokeWidth="1.5" strokeLinejoin="round" />
+              <svg width="11" height="14" viewBox="0 0 11 14" fill="none" className="ml-[2px]">
+                <path d="M1.5 12.25V1.75L9.25 7L1.5 12.25Z" fill="var(--background)" stroke="var(--background)" strokeWidth="1.5" strokeLinejoin="round" />
               </svg>
             )}
           </button>
+          <button 
+            onClick={onNext}
+            aria-label="Next"
+            className="flex items-center justify-center w-9 h-9 rounded-[12px] bg-transparent text-white hover:bg-[rgba(255,255,255,0.08)] focus-visible:bg-[rgba(255,255,255,0.08)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#121214] outline-none transition-all duration-150 ease-out opacity-80 hover:opacity-100 focus-visible:opacity-100"
+          >
+            <NextIcon />
+          </button>
+          <button 
+            onClick={onToggleRepeat}
+            aria-label="Repeat"
+            className="flex items-center justify-center w-9 h-9 rounded-[12px] bg-transparent text-white hover:bg-[rgba(255,255,255,0.08)] focus-visible:bg-[rgba(255,255,255,0.08)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#121214] outline-none transition-all duration-150 ease-out"
+            style={{ opacity: isRepeat ? 1 : 0.4 }}
+          >
+            <RepeatIcon />
+          </button>
+        </div>
+        {/* Progress bar */}
+        <div className="flex items-center gap-3 w-full max-w-[480px]">
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+            {formatTime(currentTime)}
+          </span>
+          <div 
+            ref={waveformRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseEnter={() => setIsHovering(true)}
+            onMouseLeave={() => setIsHovering(false)}
+            className="relative flex-1 h-[32px] flex items-end justify-between cursor-pointer"
+            style={{ minWidth: 200 }}
+          >
+            <style>{`
+              @keyframes waveform-pulse {
+                0%, 100% {
+                  transform: scaleY(0.6);
+                }
+                50% {
+                  transform: scaleY(1);
+                }
+              }
+              .waveform-bar {
+                animation: waveform-pulse 0.9s ease-in-out infinite;
+                transform-origin: bottom;
+              }
+            `}</style>
+            {WAVEFORM_HEIGHTS.map((height, i) => {
+              const fraction = i / 39;
+              const isActive = fraction <= progressFraction;
+              return (
+                <div
+                  key={i}
+                  className="waveform-bar"
+                  style={{
+                    width: '2px',
+                    height: `${height}px`,
+                    borderRadius: '1px',
+                    backgroundColor: isActive ? 'var(--primary)' : '#52525b',
+                    animationDelay: `${i * 0.04}s`,
+                    animationPlayState: isPlaying ? 'running' : 'paused',
+                  }}
+                />
+              );
+            })}
+            
+            {/* Tooltip */}
+            {isHovering && !isDragging && (
+              <div
+                className="absolute pointer-events-none bg-stone-900 border border-white/10 text-white text-[10px] font-mono px-2 py-1 rounded shadow-xl flex flex-col items-center z-50 animate-fade-in"
+                style={{
+                  left: `${tooltipX}px`,
+                  transform: 'translateX(-50%) translateY(-100%)',
+                  top: '-8px',
+                }}
+              >
+                {formatTime(hoverTime)}
+                <div 
+                  className="absolute w-1.5 h-1.5 rotate-45 bg-stone-900 border-r border-b border-white/10" 
+                  style={{ bottom: '-4px', left: 'calc(50% - 3px)' }} 
+                />
+              </div>
+            )}
+          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+            {formatTime(duration)}
+          </span>
         </div>
       </div>
 
-      {/* Mobile Expanded Drawer - Full Screen overlay on tap */}
-      {isMobileExpanded && (
-        <div
-          className="md:hidden fixed inset-0 z-50 flex flex-col p-6 animate-fade-in"
+      {/* Right controls */}
+      <div className="flex items-center gap-4" style={{ width: 240, justifyContent: 'flex-end' }}>
+        <PlaylistPopover track={currentTrack} />
+        <button
+          onClick={onToggleLyrics}
+          title="Lyrics"
           style={{
-            background: '#0B0B0D',
+            opacity: showLyrics ? 1 : hasLyrics ? 0.7 : 0.3,
+            transition: 'all 0.2s',
+            transform: showLyrics ? 'scale(1.1)' : 'scale(1)',
+            filter: showLyrics ? 'drop-shadow(0 0 6px var(--primary))' : 'none',
           }}
+          className="hover:opacity-100 flex items-center justify-center"
         >
-          {/* Blurred Background Art */}
+          <MicIcon active={showLyrics} />
+        </button>
+        <button
+          onClick={onToggleNowPlaying}
+          title="Toggle Now Playing & Queue"
+          style={{
+            opacity: showNowPlaying ? 1 : 0.7,
+            transition: 'all 0.2s',
+            transform: showNowPlaying ? 'scale(1.1)' : 'scale(1)',
+            filter: showNowPlaying ? 'drop-shadow(0 0 6px var(--primary))' : 'none',
+          }}
+          className="hover:opacity-100 flex items-center justify-center text-white"
+        >
+          <QueueIcon />
+        </button>
+        <button className="opacity-70 hover:opacity-100 transition-opacity text-white flex items-center justify-center"><VolumeIcon /></button>
+        {/* Volume bar */}
+        <div 
+          ref={volumeRef}
+          onMouseDown={handleVolumeMouseDown}
+          className="group relative h-[3px] rounded-full cursor-pointer flex items-center" 
+          style={{ width: 80, background: 'rgba(255,255,255,0.1)' }}
+        >
           <div 
-            className="absolute inset-0 opacity-10 blur-3xl pointer-events-none"
-            style={{
-              backgroundImage: `url(${currentTrack.cover})`,
-              backgroundPosition: 'center',
-              backgroundSize: 'cover',
+            className="absolute inset-y-0 left-0 rounded-full" 
+            style={{ width: `${volume * 100}%`, background: 'var(--primary)' }} 
+          />
+          <div
+            className="absolute rounded-full transition-transform scale-0 group-hover:scale-100"
+            style={{ 
+              left: `${volume * 100}%`, 
+              transform: 'translateX(-50%)', 
+              width: 8, 
+              height: 8, 
+              background: 'var(--primary)',
+              boxShadow: '0 0 6px var(--primary)'
             }}
           />
-
-          {/* Top Bar inside Drawer */}
-          <div className="relative z-10 flex items-center justify-between mb-8">
-            <button 
-              onClick={() => setIsMobileExpanded(false)}
-              className="text-stone-400 hover:text-white flex items-center justify-center hover:bg-white/5 rounded-full"
-              style={{ width: 44, height: 44 }}
-            >
-              ✕
-            </button>
-            <span className="font-sans font-bold text-[10px] text-stone-500 uppercase tracking-widest">Now Playing</span>
-            <button 
-              onClick={onToggleLike}
-              className="text-stone-300 hover:text-white flex items-center justify-center hover:bg-white/5 rounded-full"
-              style={{ width: 44, height: 44 }}
-            >
-              {isLiked ? <HeartFilledIcon /> : <HeartOutlineIcon />}
-            </button>
-          </div>
-
-          {/* Album Art Section */}
-          <div className="relative z-10 flex-1 flex flex-col items-center justify-center">
-            <div 
-              className="w-64 h-64 rounded-3xl overflow-hidden shadow-2xl border border-white/10"
-              style={{
-                boxShadow: '0 24px 48px rgba(0, 0, 0, 0.8)',
-              }}
-            >
-              <img src={currentTrack.cover} alt="cover" className="w-full h-full object-cover" />
-            </div>
-            
-            {/* Equalizer animation */}
-            <div className="flex items-end gap-1.5 h-6 mt-8">
-              <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} style={{ width: 3, height: 6 }} />
-              <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} style={{ width: 3, height: 6 }} />
-              <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} style={{ width: 3, height: 6 }} />
-              <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} style={{ width: 3, height: 6 }} />
-              <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} style={{ width: 3, height: 6 }} />
-            </div>
-          </div>
-
-          {/* Info Section */}
-          <div className="relative z-10 text-center mb-6">
-            <h2 className="font-sans font-bold text-xl text-white block truncate px-4">{currentTrack.title}</h2>
-            <p className="font-sans text-stone-400 text-sm mt-1">{currentTrack.artist}</p>
-          </div>
-
-          {/* Waveform Scrubber in mobile */}
-          <div className="relative z-10 w-full mb-8">
-            <div className="flex items-center justify-between text-[11px] text-stone-400 font-mono mb-2">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-
-            <div 
-              ref={scrubberRef}
-              onPointerDown={handleProgressPointerDown}
-              onPointerMove={handleProgressPointerMove}
-              onPointerUp={handleProgressPointerUp}
-              onMouseLeave={() => setHoverTime(null)}
-              className="w-full py-4 cursor-pointer relative"
-            >
-              {/* Waveform bars */}
-              <div className="flex items-center justify-between gap-[2px] h-12 w-full">
-                {WAVEFORM_HEIGHTS.map((h, i) => {
-                  const percent = (i / WAVEFORM_HEIGHTS.length) * 100
-                  const isFilled = percent <= progressPercent
-                  return (
-                    <div 
-                      key={i}
-                      className="flex-1 rounded-sm transition-all"
-                      style={{
-                        height: `${h}%`,
-                        background: isFilled ? 'var(--primary)' : 'rgba(255,255,255,0.15)',
-                      }}
-                    />
-                  )
-                })}
-              </div>
-
-              {/* Tooltip on Hover */}
-              {hoverTime !== null && (
-                <div
-                  className="absolute -top-6 bg-zinc-900 border border-white/10 px-2 py-0.5 rounded text-[10px] text-white font-mono pointer-events-none -translate-x-1/2"
-                  style={{ left: hoverX }}
-                >
-                  {formatTime(hoverTime)}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Mobile Buttons Controls */}
-          <div className="relative z-10 flex items-center justify-between px-6 mb-8">
-            <button 
-              onClick={onToggleShuffle}
-              className={`p-3 rounded-full hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none`}
-              style={{ width: 48, height: 48, opacity: isShuffle ? 1 : 0.4 }}
-            >
-              <ShuffleIcon />
-            </button>
-            <button 
-              onClick={onPrev}
-              className="p-3 rounded-full hover:bg-white/5 text-white focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              style={{ width: 48, height: 48 }}
-            >
-              <PrevIcon />
-            </button>
-            <button
-              onClick={onTogglePlay}
-              className={`w-16 h-16 rounded-full flex items-center justify-center bg-[var(--primary)] text-black focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none play-btn ${isPlaying ? 'playing' : ''}`}
-            >
-              {isPlaying ? (
-                <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
-                  <rect x="3" y="2" width="2.5" height="10" rx="1.25" fill="black" />
-                  <rect x="8.5" y="2" width="2.5" height="10" rx="1.25" fill="black" />
-                </svg>
-              ) : (
-                <svg width="14" height="18" viewBox="0 0 11 14" fill="none" className="ml-[2px]">
-                  <path d="M1.5 12.25V1.75L9.25 7L1.5 12.25Z" fill="black" stroke="black" strokeWidth="1.5" strokeLinejoin="round" />
-                </svg>
-              )}
-            </button>
-            <button 
-              onClick={onNext}
-              className="p-3 rounded-full hover:bg-white/5 text-white focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              style={{ width: 48, height: 48 }}
-            >
-              <NextIcon />
-            </button>
-            <button 
-              onClick={onToggleRepeat}
-              className={`p-3 rounded-full hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none`}
-              style={{ width: 48, height: 48, opacity: isRepeat ? 1 : 0.4 }}
-            >
-              <RepeatIcon />
-            </button>
-          </div>
-
-          {/* Bottom sheet control actions */}
-          <div className="relative z-10 flex items-center justify-center gap-6 mt-auto mb-4">
-            <button
-              onClick={onToggleLyrics}
-              style={{
-                opacity: showLyrics ? 1 : hasLyrics ? 0.7 : 0.3,
-                transform: showLyrics ? 'scale(1.1)' : 'scale(1)',
-                filter: showLyrics ? 'drop-shadow(0 0 6px var(--primary))' : 'none',
-                minHeight: 44,
-              }}
-              className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-white/10 bg-white/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-            >
-              <MicIcon active={showLyrics} />
-              <span className="font-sans text-xs font-bold text-white">Lyrics</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Desktop Player - Visible from 768px (md) */}
-      <div
-        className="hidden md:flex flex-shrink-0 items-center px-6 gap-6 relative"
-        style={{
-          height: 88,
-          background: 'var(--glass-bg)',
-          backdropFilter: 'var(--glass-blur)',
-          border: 'var(--glass-border)',
-          borderRadius: '9999px',
-          margin: '0 24px 24px 24px',
-          boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.6)',
-        }}
-      >
-        {/* Track info */}
-        <div className="flex items-center gap-3 flex-shrink-0" style={{ width: 230 }}>
-          <div className="rounded-full overflow-hidden flex-shrink-0" style={{ width: 44, height: 44, border: '1px solid var(--border)' }}>
-            <img src={currentTrack.cover} alt="cover" className="w-full h-full object-cover" />
-          </div>
-          <div className="flex items-end gap-[3px] h-4 w-4 justify-center flex-shrink-0">
-            <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} />
-            <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} />
-            <div className={`eq-bar ${isPlaying ? 'animating' : ''}`} />
-          </div>
-          <div className="flex flex-col min-w-0 flex-1">
-            <div className="player-title-marquee">
-              <span
-                ref={titleRef}
-                className={`player-title-text block truncate ${isOverflowing ? 'overflow-scroll-hover' : ''}`}
-                style={{ fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 13, color: 'var(--text)', letterSpacing: '0.2px' }}
-              >
-                {currentTrack.title}
-              </span>
-            </div>
-            <span className="truncate" style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 11, color: 'var(--text-muted)' }}>
-              {currentTrack.artist}
-            </span>
-          </div>
-        </div>
-
-        {/* Center controls & scrubber */}
-        <div className="flex-1 flex flex-col items-center gap-1 min-w-0">
-          {/* Playback Buttons */}
-          <div className="flex items-center gap-6">
-            <button 
-              onClick={onToggleShuffle}
-              className="transition-opacity text-white hover:text-white focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-full"
-              style={{ opacity: isShuffle ? 1 : 0.4, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <ShuffleIcon />
-            </button>
-            <button 
-              onClick={onPrev}
-              className="opacity-80 hover:opacity-100 transition-opacity text-white focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-full"
-              style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <PrevIcon />
-            </button>
-            {/* Pulsing Play Button */}
-            <button
-              onClick={onTogglePlay}
-              className={`flex items-center justify-center rounded-full flex-shrink-0 hover:scale-105 transition-all duration-200 play-btn focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${isPlaying ? 'playing' : ''}`}
-              style={{ width: 40, height: 40, background: 'var(--primary)' }}
-            >
-              {isPlaying ? (
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <rect x="3" y="2" width="2.5" height="10" rx="1.25" fill="var(--background)" />
-                  <rect x="8.5" y="2" width="2.5" height="10" rx="1.25" fill="var(--background)" />
-                </svg>
-              ) : (
-                <svg width="11" height="14" viewBox="0 0 11 14" fill="none" className="ml-[2px]">
-                  <path d="M1.5 12.25V1.75L9.25 7L1.5 12.25Z" fill="var(--background)" stroke="var(--background)" strokeWidth="1.5" strokeLinejoin="round" />
-                </svg>
-              )}
-            </button>
-            <button 
-              onClick={onNext}
-              className="opacity-80 hover:opacity-100 transition-opacity text-white focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-full"
-              style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <NextIcon />
-            </button>
-            <button 
-              onClick={onToggleRepeat}
-              className="transition-opacity text-white hover:text-white focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-full"
-              style={{ opacity: isRepeat ? 1 : 0.4, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <RepeatIcon />
-            </button>
-          </div>
-
-          {/* Waveform Scrubber */}
-          <div className="flex items-center gap-3 w-full max-w-[480px]">
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-              {formatTime(currentTime)}
-            </span>
-            <div 
-              ref={scrubberRef}
-              onPointerDown={handleProgressPointerDown}
-              onPointerMove={handleProgressPointerMove}
-              onPointerUp={handleProgressPointerUp}
-              onMouseLeave={() => setHoverTime(null)}
-              className="relative flex-1 py-3 cursor-pointer select-none group" 
-            >
-              <div className="flex items-end justify-between gap-[2px] h-8 w-full">
-                {WAVEFORM_HEIGHTS.map((h, i) => {
-                  const percent = (i / WAVEFORM_HEIGHTS.length) * 100
-                  const isFilled = percent <= progressPercent
-                  return (
-                    <div 
-                      key={i}
-                      className="flex-1 rounded-sm transition-all"
-                      style={{
-                        height: `${h}%`,
-                        background: isFilled ? 'var(--primary)' : 'rgba(255,255,255,0.15)',
-                      }}
-                    />
-                  )
-                })}
-              </div>
-
-              {/* Hover tooltip for timestamp */}
-              {hoverTime !== null && (
-                <div
-                  className="absolute -top-6 bg-[#16161A] border border-white/10 px-2 py-0.5 rounded text-[10px] text-white font-mono pointer-events-none -translate-x-1/2 shadow-lg"
-                  style={{ left: hoverX }}
-                >
-                  {formatTime(hoverTime)}
-                </div>
-              )}
-            </div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-              {formatTime(duration)}
-            </span>
-          </div>
-        </div>
-
-        {/* Right side controls */}
-        <div className="flex items-center gap-2 flex-shrink-0" style={{ width: 230, justifyContent: 'flex-end' }}>
-          <button
-            onClick={onToggleLike}
-            className="hover:scale-110 transition-all duration-150 flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-full"
-            style={{ width: 44, height: 44 }}
-            title={isLiked ? "Unlike" : "Like"}
-          >
-            {isLiked ? <HeartFilledIcon /> : <HeartOutlineIcon />}
-          </button>
-          <button
-            onClick={onToggleLyrics}
-            title="Lyrics"
-            style={{
-              opacity: showLyrics ? 1 : hasLyrics ? 0.7 : 0.3,
-              transition: 'all 0.2s',
-              transform: showLyrics ? 'scale(1.1)' : 'scale(1)',
-              filter: showLyrics ? 'drop-shadow(0 0 6px var(--primary))' : 'none',
-              width: 44,
-              height: 44,
-            }}
-            className="hover:opacity-100 flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-full"
-          >
-            <MicIcon active={showLyrics} />
-          </button>
-          <button 
-            className="opacity-70 hover:opacity-100 hover:scale-105 transition-all duration-150 text-white flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-full"
-            style={{ width: 44, height: 44 }}
-          >
-            <QueueIcon />
-          </button>
-          <button 
-            className="opacity-70 hover:opacity-100 hover:scale-105 transition-all duration-150 text-white flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded-full"
-            style={{ width: 44, height: 44 }}
-          >
-            <VolumeIcon />
-          </button>
-          
-          {/* Draggable Volume bar */}
-          <div 
-            ref={volumeRef}
-            onPointerDown={handleVolumePointerDown}
-            onPointerMove={handleVolumePointerMove}
-            onPointerUp={handleVolumePointerUp}
-            className="relative h-6 flex items-center cursor-pointer select-none" 
-            style={{ width: 80 }}
-          >
-            <div className="relative w-full h-[3px] rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }}>
-              <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${volume * 100}%`, background: 'rgba(255,255,255,0.7)' }} />
-              <div 
-                className="absolute top-1/2 -translate-y-1/2 rounded-full w-2.5 h-2.5 bg-white shadow-md cursor-grab active:cursor-grabbing transition-transform hover:scale-125"
-                style={{ left: `${volume * 100}%`, transform: 'translateX(-50%) translateY(-50%)' }}
-              />
-            </div>
-          </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }

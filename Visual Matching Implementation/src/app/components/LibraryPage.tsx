@@ -149,7 +149,7 @@ export function LibraryPage({
       return {
         title: pl.name,
         count: `${pl.songs?.length || 0} songs`,
-        img: firstTrack?.cover || imgTrack1,
+        img: pl.cover_url || firstTrack?.cover || imgTrack1,
         page: `playlist:${pl.id}`
       };
     })

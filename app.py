@@ -43,11 +43,13 @@ song_activity_bp = try_import("routes.song_activity_routes", "bp") or try_import
 discover_bp = try_import("routes.discover_routes", "bp") or try_import("routes.discover_routes", "discover_bp")
 search_bp = try_import("routes.search_routes", "search_bp")
 lyrics_bp = try_import("routes.lyrics_routes", "lyrics_bp")
+artist_bp = try_import("routes.artist_routes", "artist_bp")
+
 
 
 def create_app():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    frontend_dir = os.path.join(base_dir, "Lyrica", "dist")  # the folder containing index.html (or your build)
+    frontend_dir = os.path.join(base_dir, "Visual Matching Implementation", "dist")  # the folder containing index.html (or your build)
     songs_dir = os.path.join(base_dir, "static", "songs")
 
     app = Flask(
@@ -97,6 +99,9 @@ def create_app():
         app.register_blueprint(search_bp, url_prefix="/api")
     if lyrics_bp:
         app.register_blueprint(lyrics_bp, url_prefix="/api/lyrics")
+    if artist_bp:
+        app.register_blueprint(artist_bp, url_prefix="/api/artists")
+
 
 
     # ---------- Simple API (ping / route list) ----------
@@ -128,6 +133,20 @@ def create_app():
         if not os.path.exists(full_path):
             return jsonify({"error": "Song not found"}), 404
         return send_from_directory(songs_dir, filename, conditional=True)
+
+    # ---------- Serve playlist cover files safely ----------
+    @app.route("/static/playlist_covers/<path:filename>")
+    def serve_playlist_cover(filename):
+        covers_dir = os.path.join(base_dir, "static", "playlist_covers")
+        if not os.path.isdir(covers_dir):
+            return jsonify({"error": "Covers directory not found"}), 404
+        try:
+            full_path = safe_join(covers_dir, filename)
+        except Exception:
+            return jsonify({"error": "Invalid filename"}), 400
+        if not os.path.exists(full_path):
+            return jsonify({"error": "Cover not found"}), 404
+        return send_from_directory(covers_dir, filename, conditional=True)
 
     # ---------- Serve frontend app (SPA) ----------
     # If the frontend is built (index.html in frontend/), this serves the app and assets.
@@ -201,6 +220,14 @@ def seed_demo_user(app):
         try:
             if User is None:
                 return
+            # Create/verify MongoDB index for liked_songs field
+            try:
+                db = User.get_db_connection()
+                db.users.create_index("liked_songs")
+                print("[DB] Created/verified liked_songs index on users collection.")
+            except Exception as index_e:
+                print(f"[DB] Warning: could not create liked_songs index: {index_e}")
+
             if not User.find_by_email("demo@lyrica.com"):
                 demo = User()
                 demo.username = "demo"

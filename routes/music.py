@@ -751,8 +751,28 @@ def get_charts():
             
             cached = get_cached_chart(c_type, c_lang)
             if not cached or force_refresh:
-                perform_chart_update(c_type, c_lang)
-                cached = get_cached_chart(c_type, c_lang)
+                update_chart_in_background(c_type, c_lang)
+                if not cached:
+                    # Serve an immediate placeholder so the page loads and charts display instantly
+                    if c_type == "worldwide":
+                        cover = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600"
+                    elif c_type == "asia":
+                        cover = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600"
+                    elif c_type == "india":
+                        cover = "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?q=80&w=600"
+                    else:
+                        cover = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600"
+                    
+                    results.append({
+                        "type": c_type,
+                        "language": c_lang,
+                        "title": chart["title"],
+                        "description": chart["desc"],
+                        "ratio": chart["ratio"],
+                        "cover": cover,
+                        "trackCount": 50
+                    })
+                    continue
             
             if cached and cached.get("tracks"):
                 fresh_hours = 24 if c_type in ("worldwide", "asia") else 6
@@ -760,14 +780,18 @@ def get_charts():
                     update_chart_in_background(c_type, c_lang)
                     
                 first_track = cached["tracks"][0]
+                track_count = len(cached["tracks"])
+                title = chart["title"]
+                if "50" in title:
+                    title = title.replace("50", str(track_count))
                 results.append({
                     "type": c_type,
                     "language": c_lang,
-                    "title": chart["title"],
+                    "title": title,
                     "description": chart["desc"],
                     "ratio": chart["ratio"],
-                    "cover": first_track.get("cover"),
-                    "trackCount": len(cached["tracks"])
+                    "cover": first_track.get("cover") or "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600",
+                    "trackCount": track_count
                 })
         return jsonify({"charts": results}), 200
 

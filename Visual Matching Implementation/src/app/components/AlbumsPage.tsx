@@ -1,5 +1,6 @@
 import { Track } from '../App'
 import { useState } from 'react'
+import { PlaylistPopover } from './PlaylistPopover'
 
 const HeartOutlineIcon = () => (
   <svg width="16" height="15" viewBox="0 0 15.99 15.2483" fill="none">
@@ -230,15 +231,9 @@ export function AlbumsPage({
                     </div>
                     <div className="flex items-center gap-6">
                       <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 13, color: 'var(--text-muted)' }}>{track.duration || '3:30'}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onToggleLike(track.id)
-                        }}
-                        className="opacity-70 hover:opacity-100 transition-opacity"
-                      >
-                        {isLiked ? <HeartFilledIcon /> : <HeartOutlineIcon />}
-                      </button>
+                      <div onClick={(e) => e.stopPropagation()} className="opacity-70 hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <PlaylistPopover track={track} />
+                      </div>
                       <button className="opacity-70 hover:opacity-100"><DotsIcon /></button>
                     </div>
                   </div>

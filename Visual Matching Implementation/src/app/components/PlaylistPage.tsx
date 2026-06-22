@@ -1,10 +1,18 @@
-import { Track } from '../App'
+import { useState } from 'react'
+import { Track, useAppContext } from '../App'
+import { PlaylistPopover } from './PlaylistPopover'
 import imgTrack1 from 'figma:asset/14e70c7b032c1011dac6585594e2485187ee4b38.png'
 import imgTrack2 from 'figma:asset/746c0f3335f4ce57c6ce8e8b0a80b9e3e46fbcc9.png'
 import imgTrack3 from 'figma:asset/4ff19e7ec1c13a77562fcc29c262bba0e0652e9b.png'
 import imgNowPlaying from 'figma:asset/4ee233c9fd9f345420928c5ccf8cba2ae01305c9.png'
 import imgNightDrive from 'figma:asset/4f7dc13643565ba86b4c99b49f6d85abbcc197cf.png'
 import imgApathy from 'figma:asset/e0d808bf1292af2ff08e473758f65ef4dbcf6f56.png'
+
+const SparkleIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+    <path d="M8 0a.75.75 0 0 1 .693.465l1.63 3.805 3.806 1.63a.75.75 0 0 1 0 1.386l-3.806 1.63-1.63 3.806a.75.75 0 0 1-1.386 0l-1.63-3.806-3.805-1.63a.75.75 0 0 1 0-1.386l3.805-1.63 1.63-3.805A.75.75 0 0 1 8 0z" />
+  </svg>
+)
 
 const SearchIcon = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -52,6 +60,7 @@ interface PlaylistPageProps {
   playlistId: string
   title: string
   description: string
+  coverUrl?: string
   onPlayTrack: (track: Track, queue?: Track[]) => void
   currentTrack: Track
   likedTrackIds: string[]
@@ -68,6 +77,7 @@ export function PlaylistPage({
   playlistId,
   title,
   description,
+  coverUrl,
   onPlayTrack,
   currentTrack,
   likedTrackIds,
@@ -79,6 +89,19 @@ export function PlaylistPage({
   allTracks = [],
   onAddTrack,
 }: PlaylistPageProps) {
+  const { handleGeneratePlaylistCover } = useAppContext()
+  const [generating, setGenerating] = useState(false)
+
+  const handleGenerateCover = async () => {
+    setGenerating(true)
+    try {
+      await handleGeneratePlaylistCover(playlistId)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   return (
     <div className="flex-1 overflow-y-auto px-8 pb-8 mt-6">
@@ -89,7 +112,13 @@ export function PlaylistPage({
       >
         {/* Cover */}
         <div className="w-36 h-36 rounded-[16px] overflow-hidden flex-shrink-0 shadow-lg relative bg-neutral-900 border border-white/5">
-          {playlistTracks[0]?.cover ? (
+          {coverUrl ? (
+            <img
+              src={coverUrl}
+              alt={title}
+              className="w-full h-full object-cover"
+            />
+          ) : playlistTracks[0]?.cover ? (
             <img
               src={playlistTracks[0]?.cover}
               alt={title}
@@ -131,6 +160,28 @@ export function PlaylistPage({
                 Rename
               </button>
             )}
+
+            {playlistId !== 'liked-songs' && !coverUrl && (
+              <button
+                onClick={handleGenerateCover}
+                disabled={generating}
+                className="text-xs bg-white/10 hover:bg-white/20 active:bg-white/30 text-primary border border-primary/30 px-3 py-1 rounded-full flex items-center gap-1 font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                style={{ fontFamily: 'var(--font-sans)', backdropFilter: 'blur(8px)' }}
+              >
+                {generating ? (
+                  <>
+                    <span className="w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <SparkleIcon />
+                    Generate AI Cover
+                  </>
+                )}
+              </button>
+            )}
+
             {playlistId !== 'liked-songs' && onDeletePlaylist && (
               <button
                 onClick={onDeletePlaylist}
@@ -159,8 +210,20 @@ export function PlaylistPage({
       {/* Playlist tracks table/list */}
       <div className="flex flex-col gap-2 mb-12">
         {playlistTracks.length === 0 ? (
-          <div className="py-12 text-center text-[#78716c] font-medium" style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-muted)' }}>
-            No tracks in this playlist yet. Add some below!
+          <div className="flex flex-col items-center justify-center py-16 px-4 rounded-[24px] border border-dashed border-white/10 bg-white/[0.01] text-center">
+            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 text-[#78716c]">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M12 4V16C12 17.6569 10.6569 19 9 19C7.34315 19 6 17.6569 6 16C6 14.3431 7.34315 13 9 13C9.82843 13 10.5784 13.3358 11.1213 13.8787C11.6784 13.3213 12 12.35 12 11V4H18V8H14V4H12Z" fill="currentColor" />
+              </svg>
+            </div>
+            <h3 style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: 20, color: 'white', marginBottom: 6 }}>
+              {playlistId === 'liked-songs' ? 'Your Liked Songs is empty' : 'This playlist is empty'}
+            </h3>
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-muted)', maxWidth: 320, lineHeight: '1.4' }}>
+              {playlistId === 'liked-songs' 
+                ? 'Heart your favorite tracks across the app to build your custom collection here.'
+                : 'Find tracks and build your ultimate premium soundscape using the recommendations below.'}
+            </p>
           </div>
         ) : (
           playlistTracks.map((track, index) => {
@@ -215,10 +278,8 @@ export function PlaylistPage({
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-6">
-                  {/* Like Button */}
-                  <button onClick={() => onToggleLike(track.id)}>
-                    {isLiked ? <HeartFilledIcon /> : <HeartOutlineIcon />}
-                  </button>
+                  {/* Like / Add to Playlist Popover */}
+                  <PlaylistPopover track={track} />
                   {/* Remove Track Button */}
                   {playlistId !== 'liked-songs' && onRemoveTrack && (
                     <button
