@@ -55,7 +55,7 @@ function Container3() {
     <div className="h-[18px] relative shrink-0 w-[16px]" data-name="Container">
       <svg className="absolute block inset-0 size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 16 18">
         <g id="Container">
-          <path d={svgPaths.p12a32500} fill="var(--fill-0, #E2FB5E)" id="Icon" />
+          <path d={svgPaths.p12a32500} fill="var(--fill-0, #C6FF33)" id="Icon" />
         </g>
       </svg>
     </div>
@@ -65,7 +65,7 @@ function Container3() {
 function Container4() {
   return (
     <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Container">
-      <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold justify-center leading-[0] not-italic relative shrink-0 text-[#e2fb5e] text-[14px] whitespace-nowrap">
+      <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold justify-center leading-[0] not-italic relative shrink-0 text-[#C6FF33] text-[14px] whitespace-nowrap">
         <p className="leading-[20px]">HOME</p>
       </div>
     </div>
@@ -539,7 +539,7 @@ function Container29() {
 function Link5() {
   return (
     <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Link">
-      <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold h-[17px] justify-center leading-[0] not-italic relative shrink-0 text-[#e2fb5e] text-[11.2px] uppercase w-[59.3px]">
+      <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold h-[17px] justify-center leading-[0] not-italic relative shrink-0 text-[#C6FF33] text-[11.2px] uppercase w-[59.3px]">
         <p className="leading-[16.8px]">Show all</p>
       </div>
     </div>
@@ -723,7 +723,7 @@ function AsideRightPanelNowPlaying() {
 
 function Background() {
   return (
-    <div className="bg-[#e2fb5e] content-stretch flex items-start px-[8px] py-[4px] relative rounded-[2px] shrink-0" data-name="Background">
+    <div className="bg-[#C6FF33] content-stretch flex items-start px-[8px] py-[4px] relative rounded-[2px] shrink-0" data-name="Background">
       <div className="[word-break:break-word] flex flex-col font-['Inter:Black',sans-serif] font-black h-[16px] justify-center leading-[0] not-italic relative shrink-0 text-[10.4px] text-black tracking-[1.04px] uppercase w-[120.7px]">
         <p className="leading-[15.6px]">Featured Release</p>
       </div>
@@ -766,7 +766,7 @@ function Container43() {
 
 function Button2() {
   return (
-    <div className="bg-[#e2fb5e] content-stretch flex gap-[8px] items-center px-[32px] py-[13px] relative rounded-[9999px] shrink-0" data-name="Button">
+    <div className="bg-[#C6FF33] content-stretch flex gap-[8px] items-center px-[32px] py-[13px] relative rounded-[9999px] shrink-0" data-name="Button">
       <Container43 />
       <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold h-[24px] justify-center leading-[0] not-italic relative shrink-0 text-[16px] text-black text-center w-[72.53px]">
         <p className="leading-[24px]">Play Now</p>
@@ -1793,7 +1793,7 @@ function Container87() {
     <div className="content-stretch flex gap-[32px] items-center relative shrink-0" data-name="Container">
       <Button7 />
       <Button8 />
-      <button className="bg-[#e2fb5e] content-stretch cursor-pointer flex items-center justify-center relative rounded-[9999px] shrink-0 size-[47px]" data-name="State">
+      <button className="bg-[#C6FF33] content-stretch cursor-pointer flex items-center justify-center relative rounded-[9999px] shrink-0 size-[47px]" data-name="State">
         <div className="-translate-y-1/2 absolute bg-[rgba(255,255,255,0)] left-0 rounded-[9999px] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)] size-[48px] top-[calc(50%+0.5px)]" data-name="Button:shadow" />
         <Container90 />
       </button>
@@ -1816,7 +1816,7 @@ function Container94() {
 function Overlay3() {
   return (
     <div className="bg-[rgba(255,255,255,0.1)] flex-[1_0_0] h-[4px] min-w-px overflow-clip relative rounded-[9999px]" data-name="Overlay">
-      <div className="absolute bg-[#e2fb5e] inset-[0_55%_0_0]" data-name="Background" />
+      <div className="absolute bg-[#C6FF33] inset-[0_55%_0_0]" data-name="Background" />
     </div>
   );
 }
@@ -2022,7 +2022,7 @@ function Button13() {
   return (
     <div className="-translate-y-1/2 absolute content-stretch flex flex-col items-center justify-center left-[52px] p-[8px] top-[calc(50%+0.5px)]" data-name="Button">
       <Container101 />
-      <div className="absolute bg-[#e2fb5e] right-[7.98px] rounded-[9999px] size-[8px] top-[8px]" data-name="Background" />
+      <div className="absolute bg-[#C6FF33] right-[7.98px] rounded-[9999px] size-[8px] top-[8px]" data-name="Background" />
     </div>
   );
 }

@@ -11,6 +11,8 @@ import { ChartDetailPage } from './components/ChartDetailPage'
 import { AuthModal } from './components/AuthModal'
 import { LyricsView } from './components/LyricsView'
 import { NowPlayingPanel } from './components/NowPlayingPanel'
+import { SearchPage } from './components/SearchPage'
+import { motion, AnimatePresence } from 'framer-motion'
 
 import defaultCover from 'figma:asset/d3b57b756182091c9c0eebb36cff4c1f36c5fc0f.png'
 
@@ -22,6 +24,13 @@ declare global {
 }
 
 export type Page = string; // Support dynamic playlist pages (e.g. 'playlist:<id>')
+
+export type SearchNavState = {
+  query?: string;
+  filter?: 'all' | 'tracks' | 'albums' | 'playlists' | 'artists';
+  source?: 'saavn' | 'youtube';
+  triggerMerge?: boolean;
+}
 
 export interface Track {
   id: string
@@ -92,7 +101,7 @@ const HeartOutlineIcon = () => (
 
 const HeartFilledIcon = () => (
   <svg width="16" height="15" viewBox="0 0 15.99 15.2483" fill="none">
-    <path d="M7.995 15.2483L6.83572 14.168C5.4899 12.9077 4.37726 11.8205 3.49781 10.9064C2.61836 9.99238 1.9188 9.1718 1.39912 8.44471C0.879449 7.71761 0.516343 7.04937 0.309806 6.44C0.103269 5.83062 0 5.2074 0 4.57032C0 3.26847 0.419737 2.18129 1.25921 1.30877C2.09869 0.436258 3.1447 0 4.39725 0C5.09015 0 5.74973 0.152344 6.37601 0.457032C7.00228 0.76172 7.54195 1.19105 7.995 1.74503C8.44804 1.19105 8.98771 0.76172 9.61398 0.457032C10.2403 0.152344 10.8998 0 11.5927 0C12.8453 0 13.8913 0.436258 14.7308 1.30877C15.5703 2.18129 15.99 3.26847 15.99 4.57032C15.99 5.2074 15.8867 5.83062 15.6802 6.44C15.4736 7.04937 15.1105 7.71761 14.5909 8.44471C14.0712 9.1718 13.3716 9.99238 12.4922 10.9064C11.6127 11.8205 10.5001 12.9077 9.15427 14.168L7.995 15.2483Z" fill="#E2FB5E" />
+    <path d="M7.995 15.2483L6.83572 14.168C5.4899 12.9077 4.37726 11.8205 3.49781 10.9064C2.61836 9.99238 1.9188 9.1718 1.39912 8.44471C0.879449 7.71761 0.516343 7.04937 0.309806 6.44C0.103269 5.83062 0 5.2074 0 4.57032C0 3.26847 0.419737 2.18129 1.25921 1.30877C2.09869 0.436258 3.1447 0 4.39725 0C5.09015 0 5.74973 0.152344 6.37601 0.457032C7.00228 0.76172 7.54195 1.19105 7.995 1.74503C8.44804 1.19105 8.98771 0.76172 9.61398 0.457032C10.2403 0.152344 10.8998 0 11.5927 0C12.8453 0 13.8913 0.436258 14.7308 1.30877C15.5703 2.18129 15.99 3.26847 15.99 4.57032C15.99 5.2074 15.8867 5.83062 15.6802 6.44C15.4736 7.04937 15.1105 7.71761 14.5909 8.44471C14.0712 9.1718 13.3716 9.99238 12.4922 10.9064C11.6127 11.8205 10.5001 12.9077 9.15427 14.168L7.995 15.2483Z" fill="#C6FF33" />
   </svg>
 )
 
@@ -124,12 +133,13 @@ export default function App() {
   const [user, setUser] = useState<any>(null)
   const [loadingUser, setLoadingUser] = useState(true)
   const [page, setPage] = useState<Page>('home')
+  const [searchNavState, setSearchNavState] = useState<SearchNavState>({})
   const [activeArtistId, setActiveArtistId] = useState<string | null>(null)
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null)
-  
+
   // Track database
   const [tracks, setTracks] = useState<Track[]>([])
-  
+
   // Player state
   const [currentTrack, setCurrentTrack] = useState<Track>({
     id: '',
@@ -153,7 +163,7 @@ export default function App() {
   const [showNowPlaying, setShowNowPlaying] = useState(false)
   const [lyricsHasSync, setLyricsHasSync] = useState(false)
   const rafRef = useRef<number | null>(null)
-  
+
   // Queue state
   const [queue, setQueue] = useState<Track[]>([])
   const [queueIndex, setQueueIndex] = useState(0)
@@ -162,7 +172,7 @@ export default function App() {
   const [likedTrackIds, setLikedTrackIds] = useState<string[]>([])
   const [likedTracks, setLikedTracks] = useState<Track[]>([])
   const [playlists, setPlaylists] = useState<Playlist[]>([])
-  
+
   // Recently Played state
   const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(() => {
     try {
@@ -176,89 +186,150 @@ export default function App() {
     return []
   })
 
-  // Global search states
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchMode, setSearchMode] = useState<'saavn' | 'youtube'>('saavn')
-  const [searchResults, setSearchResults] = useState<Track[]>([])
-  const [searching, setSearching] = useState(false)
-  const [showDropdown, setShowDropdown] = useState(false)
-  const [isSearchSubmitted, setIsSearchSubmitted] = useState(false)
+  // Spotlight and Shared activePlatform states
+  const [spotlightQuery, setSpotlightQuery] = useState('')
+  const [showSpotlight, setShowSpotlight] = useState(false)
+  const [spotlightResults, setSpotlightResults] = useState<any[]>([])
+  const [spotlightLoading, setSpotlightLoading] = useState(false)
+  const [spotlightSelectedIndex, setSpotlightSelectedIndex] = useState(-1)
+  const [activePlatform, setActivePlatform] = useState<'saavn' | 'youtube'>('saavn')
 
-  const searchContainerRef = useRef<HTMLDivElement>(null)
+  const spotlightInputRef = useRef<HTMLInputElement>(null)
+  const topBarPillRef = useRef<HTMLDivElement>(null)
+  const spotlightContainerRef = useRef<HTMLDivElement>(null)
 
-  const matchingArtists = useMemo(() => {
-    if (!searchQuery.trim()) return []
-    return artistsList.filter(artist => {
-      const cleanQuery = searchQuery.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9]/g, '');
-      const cleanName = artist.name.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9]/g, '');
-      const cleanGenre = artist.genre.toLowerCase().replace(/[^a-z0-9]/g, '');
-      
-      return artist.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        artist.genre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (cleanQuery.length > 0 && (cleanName.includes(cleanQuery) || cleanGenre.includes(cleanQuery)));
-    })
-  }, [searchQuery])
 
-  // Debounced search query for typeahead dropdown
+
+  // Debounced search query for Spotlight dropdown
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([])
-      setShowDropdown(false)
+    if (page === 'search') {
+      setShowSpotlight(false)
       return
     }
 
-    // Instantly show dropdown for local artist matches
-    setShowDropdown(true)
+    if (!spotlightQuery.trim()) {
+      setSpotlightResults([])
+      setSpotlightSelectedIndex(-1)
+      return
+    }
+
+    // Reset index on query change
+    setSpotlightSelectedIndex(-1)
 
     const delayDebounce = setTimeout(async () => {
-      setSearching(true)
+      setSpotlightLoading(true)
       try {
-        const res = await fetch(`/api/music/search?q=${encodeURIComponent(searchQuery)}&source=${searchMode}`)
+        const res = await fetch(`/api/music/search?q=${encodeURIComponent(spotlightQuery)}&source=${activePlatform}&type=all`)
         if (res.ok) {
           const data = await res.json()
-          setSearchResults(data.results || [])
+          setSpotlightResults(data.results || [])
         }
       } catch (err) {
-        console.error('Search error:', err)
+        console.error('Spotlight search error:', err)
       } finally {
-        setSearching(false)
+        setSpotlightLoading(false)
       }
-    }, 400)
+    }, 300)
 
     return () => clearTimeout(delayDebounce)
-  }, [searchQuery, searchMode])
+  }, [spotlightQuery, activePlatform, page])
 
   // Handle click outside dropdown to close it
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
-        setShowDropdown(false)
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        spotlightContainerRef.current &&
+        !spotlightContainerRef.current.contains(e.target as Node) &&
+        topBarPillRef.current &&
+        !topBarPillRef.current.contains(e.target as Node)
+      ) {
+        setShowSpotlight(false)
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [])
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      setIsSearchSubmitted(true)
-      setShowDropdown(false)
+  // Global keydown escape listener
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showSpotlight) {
+        setShowSpotlight(false)
+        spotlightInputRef.current?.blur()
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [showSpotlight])
+
+  const handleSpotlightKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setShowSpotlight(false)
+      spotlightInputRef.current?.blur()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (spotlightResults.length > 0) {
+        setSpotlightSelectedIndex(prev => (prev + 1) % spotlightResults.length)
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (spotlightResults.length > 0) {
+        setSpotlightSelectedIndex(prev => (prev - 1 + spotlightResults.length) % spotlightResults.length)
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (spotlightSelectedIndex >= 0 && spotlightSelectedIndex < spotlightResults.length) {
+        handleSelectSpotlightItem(spotlightResults[spotlightSelectedIndex])
+      }
     }
   }
 
-  const handleClearSearch = () => {
-    setSearchQuery('')
-    setSearchResults([])
-    setIsSearchSubmitted(false)
-    setShowDropdown(false)
-    setPage('home')
+  const handleSelectSpotlightItem = (item: any) => {
+    setShowSpotlight(false)
+    setSpotlightQuery('')
+    spotlightInputRef.current?.blur()
+
+    if (item.type === 'track') {
+      const track: Track = {
+        id: item.id,
+        title: item.title,
+        artist: item.subtitle,
+        cover: item.cover,
+        source: item.id.startsWith('yt-') ? 'youtube' : 'saavn',
+        videoId: item.id.startsWith('yt-') ? item.rawId : undefined,
+        saavn_id: !item.id.startsWith('yt-') ? item.rawId : undefined
+      }
+      handlePlayTrack(track)
+    } else if (item.type === 'artist') {
+      handleNavigate('artists', item.rawId, null)
+    } else if (item.type === 'album') {
+      handleNavigate('albums', null, item.rawId)
+    } else if (item.type === 'playlist') {
+      handleNavigate(`playlist:${item.rawId}`, null, null)
+    }
   }
 
   const handleNavigate = useCallback((targetPage: string, artistId: string | null = null, albumId: string | null = null) => {
+    if (targetPage !== 'search') {
+      setSearchNavState({})
+      setShowSpotlight(false)
+    }
+    if (targetPage === 'search') {
+      const spotlightWasActive = showSpotlight
+      setSearchNavState(prev => ({
+        query: artistId || spotlightQuery || prev.query || '',
+        filter: (albumId as any) || prev.filter || 'all',
+        source: activePlatform,
+        triggerMerge: spotlightWasActive
+      }))
+      setShowSpotlight(false)
+      setPage('search')
+      return
+    }
     setActiveArtistId(artistId)
     setActiveAlbumId(albumId)
     setPage(targetPage)
-  }, [])
+  }, [showSpotlight, spotlightQuery, activePlatform])
 
   const handleNavigateArtistByName = useCallback((artistName: string) => {
     // 1. Look for a local artist whose normalized name matches the normalized artistName
@@ -366,7 +437,7 @@ export default function App() {
     const checkYT = setInterval(() => {
       if (window.YT && window.YT.Player) {
         clearInterval(checkYT);
-        
+
         let container = document.getElementById('yt-player-container');
         if (!container) {
           container = document.createElement('div');
@@ -381,7 +452,7 @@ export default function App() {
           container.appendChild(child);
           document.body.appendChild(container);
         }
-        
+
         ytPlayerRef.current = new window.YT.Player('yt-player', {
           height: '0',
           width: '0',
@@ -717,8 +788,8 @@ export default function App() {
       const response = await fetch('/api/user/liked-songs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          song_id: trackId, 
+        body: JSON.stringify({
+          song_id: trackId,
           action,
           track: payloadTrack
         }),
@@ -892,7 +963,7 @@ export default function App() {
       if (!data.success || !data.playlist?.id) {
         throw new Error('Failed to create playlist');
       }
-      
+
       const newPlaylist = data.playlist;
       createdPlaylistId = newPlaylist.id;
 
@@ -1008,11 +1079,24 @@ export default function App() {
     }
 
     switch (page) {
+      case 'search':
+        return (
+          <SearchPage
+            onPlayTrack={handlePlayTrack}
+            currentTrack={currentTrack}
+            onNavigate={handleNavigate}
+            likedTrackIds={likedTrackIds}
+            onToggleLike={handleToggleLike}
+            navState={searchNavState}
+            activePlatform={activePlatform}
+            onPlatformChange={setActivePlatform}
+          />
+        )
       case 'home':
         return (
-          <HomePage 
-            onPlayTrack={handlePlayTrack} 
-            currentTrack={currentTrack} 
+          <HomePage
+            onPlayTrack={handlePlayTrack}
+            currentTrack={currentTrack}
             onNavigate={handleNavigate}
             likedTrackIds={likedTrackIds}
             onToggleLike={handleToggleLike}
@@ -1024,7 +1108,7 @@ export default function App() {
         )
       case 'artists':
         return (
-          <ArtistsPage 
+          <ArtistsPage
             activeArtistId={activeArtistId}
             onSelectArtist={(id: string | null) => handleNavigate('artists', id, null)}
             onPlayTrack={handlePlayTrack}
@@ -1038,9 +1122,9 @@ export default function App() {
         )
       case 'library':
         return (
-          <LibraryPage 
-            onNavigate={handleNavigate} 
-            onPlayTrack={handlePlayTrack} 
+          <LibraryPage
+            onNavigate={handleNavigate}
+            onPlayTrack={handlePlayTrack}
             playlists={playlists}
             likedTrackIds={likedTrackIds}
             allTracks={tracks}
@@ -1051,7 +1135,7 @@ export default function App() {
         )
       case 'albums':
         return (
-          <AlbumsPage 
+          <AlbumsPage
             activeAlbumId={activeAlbumId}
             onSelectAlbum={(id: string | null) => handleNavigate('albums', null, id)}
             onPlayTrack={handlePlayTrack}
@@ -1066,7 +1150,7 @@ export default function App() {
         return <RadioPage onPlayTrack={handlePlayTrack} />
       case 'daily-mix':
         return (
-          <PlaylistPage 
+          <PlaylistPage
             playlistId="daily-mix"
             title="Daily Mix 1"
             description="Your daily dose of ambient, lofi, and synthwave textures curated especially for you."
@@ -1079,7 +1163,7 @@ export default function App() {
         )
       case 'liked-songs':
         return (
-          <PlaylistPage 
+          <PlaylistPage
             playlistId="liked-songs"
             title="Liked Songs"
             description="All your favorite tracks saved in one premium dashboard space."
@@ -1092,12 +1176,12 @@ export default function App() {
         )
       default:
         return (
-          <HomePage 
-            onPlayTrack={handlePlayTrack} 
-            currentTrack={currentTrack} 
-            onNavigate={handleNavigate} 
-            likedTrackIds={likedTrackIds} 
-            onToggleLike={handleToggleLike} 
+          <HomePage
+            onPlayTrack={handlePlayTrack}
+            currentTrack={currentTrack}
+            onNavigate={handleNavigate}
+            likedTrackIds={likedTrackIds}
+            onToggleLike={handleToggleLike}
             allTracks={tracks}
             queue={queue}
             queueIndex={queueIndex}
@@ -1113,7 +1197,7 @@ export default function App() {
       <div className="flex h-screen w-screen items-center justify-center bg-[#0f0f10]">
         <div className="flex flex-col items-center gap-3">
           <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 36, color: 'white', letterSpacing: '3.6px' }}>LYRICA</div>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 10, color: '#E2FB5E', letterSpacing: '1px' }}>LOADING SESSION...</div>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 10, color: '#C6FF33', letterSpacing: '1px' }}>LOADING SESSION...</div>
         </div>
       </div>
     )
@@ -1138,482 +1222,202 @@ export default function App() {
         className="flex h-screen overflow-hidden"
         style={{ fontFamily: 'Inter, sans-serif', background: '#0f0f10', minWidth: 'auto' }}
       >
-      {/* Left Sidebar */}
-      <Sidebar 
-        currentPage={page} 
-        onNavigate={(p) => handleNavigate(p, null, null)} 
-        playlists={playlists}
-        onCreatePlaylist={handleCreatePlaylist}
-        allTracks={tracks}
-      />
+        {/* Left Sidebar */}
+        <Sidebar
+          currentPage={page}
+          onNavigate={(p) => handleNavigate(p, null, null)}
+          playlists={playlists}
+          onCreatePlaylist={handleCreatePlaylist}
+          allTracks={tracks}
+        />
 
-      {/* Main area */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Global Search Header Bar */}
-        <div className="flex items-center justify-between px-8 pt-6 pb-4 flex-shrink-0 z-30 gap-4">
-          <div className="flex items-center gap-4 flex-1">
-            {/* Home button directly before the search bar */}
-            <button
-              onClick={handleClearSearch}
-              className="opacity-65 hover:opacity-100 transition-opacity flex-shrink-0"
-              style={{ cursor: 'pointer' }}
-              title="Go to Home"
+        {/* Main area */}
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden relative">
+          {/* Spotlight overlay container */}
+          {showSpotlight && spotlightResults.length > 0 && (
+            <div
+              ref={spotlightContainerRef}
+              className="fixed left-1/2 -translate-x-1/2 w-[560px] bg-[#141414] border border-[#2a2a2a] rounded-2xl py-3 max-h-[420px] overflow-y-auto z-[999] shadow-2xl flex flex-col gap-0.5"
+              style={{ top: '52px' }}
             >
-              <svg width="18" height="18" viewBox="0 0 16 18" fill="none">
-                <path d="M2 16H5V10H11V16H14V7L8 2.5L2 7V16V16M0 18V6L8 0L16 6V18H9V12H7V18H0V18" fill="white" />
-              </svg>
-            </button>
+              {spotlightResults.map((item, idx) => {
+                let badge = 'Track'
+                if (item.type === 'artist') badge = 'Artist'
+                else if (item.type === 'album') badge = 'Album'
+                else if (item.type === 'playlist') badge = 'Playlist'
 
-            {/* Search Input Container */}
-            <div ref={searchContainerRef} className="relative flex-1 max-w-[800px]">
-              <div
-                className="flex items-center gap-4 px-4 py-3 rounded-full w-full"
-                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.05)' }}
-              >
-                <SearchIcon />
-                <input
-                  type="text"
-                  placeholder="Search for tracks, artists..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    if (!e.target.value.trim()) {
-                      setIsSearchSubmitted(false)
-                    }
-                  }}
-                  onKeyDown={handleKeyDown}
-                  className="bg-transparent text-white border-none outline-none w-full"
-                  style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 14 }}
-                />
-                {searchQuery && (
-                  <button
-                    onClick={handleClearSearch}
-                    className="text-stone-400 hover:text-white text-xs px-2"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
+                const isSelected = idx === spotlightSelectedIndex;
 
-              {/* Typeahead Dropdown */}
-              {showDropdown && (searchResults.length > 0 || matchingArtists.length > 0) && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    marginTop: 8,
-                    background: '#18181b',
-                    borderRadius: 16,
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
-                    maxHeight: 360,
-                    overflowY: 'auto',
-                    zIndex: 50,
-                    padding: '8px 0',
-                  }}
-                >
-                  {/* Matching Artists Section in Dropdown */}
-                  {matchingArtists.length > 0 && (
-                    <div className="px-2 pb-2">
-                      <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest px-2 py-1.5">Artists</div>
-                      {matchingArtists.slice(0, 3).map((artistItem) => (
-                        <div
-                          key={artistItem.id}
-                          onClick={() => {
-                            handleNavigate('artists', artistItem.id, null)
-                            setShowDropdown(false)
-                          }}
-                          className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                        >
-                          <img
-                            src={artistItem.cover}
-                            alt=""
-                            className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-white/10"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-white text-xs font-bold truncate">{artistItem.name}</div>
-                            <div className="text-stone-400 text-[10px] truncate">{artistItem.genre.split('/')[0]} • Artist</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Matching Songs Section in Dropdown */}
-                  {searchResults.length > 0 && (
-                    <div className="px-2">
-                      <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest px-2 py-1.5 border-t border-white/5 mt-1.5">Songs</div>
-                      {searchResults.slice(0, 5).map((item) => (
-                        <div
-                          key={item.id}
-                          onClick={() => {
-                            handlePlayTrack(item, searchResults)
-                            setShowDropdown(false)
-                          }}
-                          className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                        >
-                          <img
-                            src={item.cover}
-                            alt=""
-                            className="w-8 h-8 rounded-md object-cover flex-shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-white text-xs font-semibold truncate" dangerouslySetInnerHTML={{ __html: item.title }} />
-                            <div className="text-stone-400 text-[10px] truncate">{item.artist}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
+                return (
                   <div
-                    onClick={() => {
-                      setIsSearchSubmitted(true)
-                      setShowDropdown(false)
-                    }}
-                    className="text-center py-2 text-xs font-bold border-t border-white/5 mt-1 cursor-pointer transition-colors"
-                    style={{ color: '#E2FB5E' }}
+                    key={item.id}
+                    onClick={() => handleSelectSpotlightItem(item)}
+                    onMouseEnter={() => setSpotlightSelectedIndex(idx)}
+                    className={`h-12 px-4 flex items-center justify-between cursor-pointer transition-colors ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'
+                      }`}
                   >
-                    Press Enter to see all results
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Source Switch Toggle */}
-            <div className="flex items-center gap-1 p-1 rounded-full bg-white/5 border border-white/10 flex-shrink-0">
-              <button
-                onClick={() => setSearchMode('saavn')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
-                  searchMode === 'saavn'
-                    ? 'bg-[#E2FB5E] text-black shadow-md'
-                    : 'text-stone-400 hover:text-white'
-                }`}
-              >
-                JioSaavn
-              </button>
-              <button
-                onClick={() => setSearchMode('youtube')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
-                  searchMode === 'youtube'
-                    ? 'bg-[#E2FB5E] text-black shadow-md'
-                    : 'text-stone-400 hover:text-white'
-                }`}
-              >
-                YT Music
-              </button>
-            </div>
-          </div>
-            
-          <div className="flex items-center gap-4 flex-shrink-0">
-            <button className="opacity-60 hover:opacity-100 transition-opacity"><TicketIcon /></button>
-            <button className="opacity-60 hover:opacity-100 transition-opacity relative">
-              <BellIcon />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E2FB5E] border-2 border-[#0f0f10]" />
-            </button>
-            <button className="opacity-60 hover:opacity-100 transition-opacity"><SettingsIcon /></button>
-            <img 
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80" 
-              alt="Profile"
-              className="w-8 h-8 rounded-full object-cover border border-white/10 flex-shrink-0"
-            />
-          </div>
-        </div>
-
-        {/* Page content */}
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          {isSearchSubmitted ? (
-            <div className="flex-1 overflow-y-auto px-8 pb-8 animate-fade-in">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h1 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 28, color: '#fff' }}>
-                    Results for "{searchQuery}"
-                  </h1>
-                  <p className="text-stone-500 text-sm mt-1">
-                    Showing matches from {searchMode === 'saavn' ? 'JioSaavn' : 'YouTube Music'}
-                  </p>
-                </div>
-                <button
-                  onClick={handleClearSearch}
-                  className="px-4 py-2 rounded-full text-xs font-bold border hover:bg-white/5 transition-all"
-                  style={{ borderColor: 'rgba(255,255,255,0.15)', color: '#fff' }}
-                >
-                  Back to Home
-                </button>
-              </div>
-
-              {/* Artists Search Shelf */}
-              {matchingArtists.length > 0 && (
-                <div className="mb-10">
-                  <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
-                    Artists
-                  </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                    {matchingArtists.map((artistItem) => (
-                      <div
-                        key={artistItem.id}
-                        onClick={() => {
-                          handleNavigate('artists', artistItem.id, null);
-                          setIsSearchSubmitted(false);
-                        }}
-                        className="group relative rounded-[20px] p-4 transition-all duration-300 cursor-pointer flex flex-col hover:bg-white/[0.04] border border-transparent hover:border-white/5 bg-white/[0.01]"
-                      >
-                        <div className="relative aspect-square w-full rounded-2xl overflow-hidden mb-4 border border-white/5">
-                          <img
-                            src={artistItem.cover}
-                            alt={artistItem.name}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 opacity-0 group-hover:opacity-30 transition-opacity duration-300" style={{ background: 'radial-gradient(circle, var(--primary) 0%, transparent 70%)' }} />
-                          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                            <div className="w-10 h-10 rounded-full bg-[#E2FB5E] flex items-center justify-center text-black font-bold transform translate-y-3 group-hover:translate-y-0 transition-all duration-300 hover:scale-110">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-white text-[14px] font-bold truncate group-hover:text-[#E2FB5E] transition-colors mb-1">
-                            {artistItem.name}
-                          </span>
-                          <div className="flex items-center gap-1.5 text-stone-400 text-[11px] font-medium uppercase tracking-wider mb-0.5">
-                            <span className="truncate">{artistItem.genre.split('/')[0].trim()}</span>
-                          </div>
-                          <span className="text-stone-500 text-[10px] font-semibold">{artistItem.monthlyListeners} Listeners</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Main Spotify double column */}
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
-                {/* Top Result Card */}
-                <div className="md:col-span-2 flex flex-col">
-                  <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
-                    Top Result
-                  </h2>
-                  {searchResults[0] ? (
-                    <div
-                      onClick={() => handlePlayTrack(searchResults[0], searchResults)}
-                      className="group flex-1 flex flex-col justify-end p-6 rounded-2xl relative overflow-hidden cursor-pointer transition-transform hover:scale-[1.01]"
-                      style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.05)',
-                        minHeight: 280,
-                      }}
-                    >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       <img
-                        src={searchResults[0].cover}
+                        src={item.cover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=100'}
                         alt=""
-                        className="w-24 h-24 rounded-2xl object-cover shadow-2xl mb-6 border border-white/10"
+                        className="w-9 h-9 rounded object-cover flex-shrink-0"
                       />
-                      <h3
-                        style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 24, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        dangerouslySetInnerHTML={{ __html: searchResults[0].title }}
-                      />
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-stone-400 font-medium text-sm">{searchResults[0].artist}</span>
-                      </div>
-                      
-                      {/* Floating Play Button */}
-                      <div
-                        className="absolute bottom-6 right-6 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transform translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300"
-                        style={{ background: '#E2FB5E' }}
-                      >
-                        <PlayIconGreen />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-white text-xs font-semibold truncate">{item.title}</span>
+                        <span className="text-stone-400 text-[10px] truncate">{item.subtitle}</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center rounded-2xl border border-dashed border-white/10 text-stone-500">
-                      No results
-                    </div>
-                  )}
-                </div>
-
-                {/* Songs list */}
-                <div className="md:col-span-3 flex flex-col">
-                  <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
-                    Songs
-                  </h2>
-                  <div className="flex flex-col gap-2">
-                    {searchResults.slice(1, 6).map((song) => {
-                      const isCurrent = currentTrack.id === song.id
-                      const isLiked = likedTrackIds.includes(song.id)
-                      return (
-                        <div
-                          key={song.id}
-                          onClick={() => handlePlayTrack(song, searchResults)}
-                          className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition-all cursor-pointer group"
-                          style={{ background: isCurrent ? 'rgba(255,255,255,0.02)' : 'transparent' }}
-                        >
-                          <div className="flex items-center gap-4 min-w-0 flex-1">
-                            <img
-                              src={song.cover}
-                              alt=""
-                              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span
-                                style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 14, color: isCurrent ? '#E2FB5E' : '#fff' }}
-                                className="truncate"
-                                dangerouslySetInnerHTML={{ __html: song.title }}
-                              />
-                              <span className="text-stone-400 text-xs truncate">{song.artist}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-4 ml-4">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleToggleLike(song.id)
-                              }}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              {isLiked ? <HeartFilledIcon /> : <HeartOutlineIcon />}
-                            </button>
-                            {song.duration && (
-                              <span className="text-stone-500 text-xs font-semibold">{song.duration}</span>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
+                    <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest ml-4 flex-shrink-0 bg-stone-900 border border-stone-800 px-2 py-0.5 rounded">
+                      {badge}
+                    </span>
                   </div>
-                </div>
-              </div>
-
-              {/* Extra search matches list */}
-              {searchResults.length > 5 && (
-                <div>
-                  <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
-                    All matches
-                  </h2>
-                  <div className="flex flex-col gap-2">
-                    {searchResults.slice(5).map((track, index) => {
-                      const isCurrent = currentTrack.id === track.id
-                      const isLiked = likedTrackIds.includes(track.id)
-                      return (
-                        <div
-                          key={track.id}
-                          onClick={() => handlePlayTrack(track, searchResults)}
-                          className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-white/5 transition-all cursor-pointer"
-                          style={{ background: isCurrent ? 'rgba(255,255,255,0.03)' : 'transparent' }}
-                        >
-                          <div className="flex items-center gap-4 min-w-0 flex-1">
-                            <span className="text-stone-500 font-bold text-xs w-6 flex-shrink-0">
-                              {String(index + 6).padStart(2, '0')}
-                            </span>
-                            <img
-                              src={track.cover}
-                              alt=""
-                              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span
-                                style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 14, color: isCurrent ? '#E2FB5E' : '#fff' }}
-                                className="truncate"
-                                dangerouslySetInnerHTML={{ __html: track.title }}
-                              />
-                              <span className="text-stone-400 text-xs truncate">{track.artist}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-6">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleToggleLike(track.id)
-                              }}
-                            >
-                              {isLiked ? <HeartFilledIcon /> : <HeartOutlineIcon />}
-                            </button>
-                            {track.duration && (
-                              <span className="text-stone-500 text-xs">{track.duration}</span>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-              {renderPageContent()}
+                )
+              })}
             </div>
           )}
+
+          {/* Global Search Header Bar */}
+          <div className="flex items-center justify-between px-8 pt-6 pb-4 flex-shrink-0 z-30 gap-4">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleNavigate('home')}
+                  className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/60 hover:text-white transition-colors cursor-pointer"
+                  title="Go Home"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Centralized search pill */}
+            <div className="flex-shrink-0 w-[300px] flex justify-center" ref={topBarPillRef}>
+              <AnimatePresence>
+                {page !== 'search' && (
+                  <motion.div
+                    layoutId="search-bar"
+                    className="flex items-center gap-2.5 px-4 py-2 bg-[#161616] border border-[#2a2a2a] rounded-full w-[300px] hover:border-white/20 transition-all duration-300 shadow-md"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40 flex-shrink-0">
+                      <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <input
+                      ref={spotlightInputRef}
+                      type="text"
+                      placeholder="Search Lyrica..."
+                      value={spotlightQuery}
+                      onChange={(e) => setSpotlightQuery(e.target.value)}
+                      onFocus={() => {
+                        if (page !== 'search') setShowSpotlight(true)
+                      }}
+                      onKeyDown={handleSpotlightKeyDown}
+                      className="bg-transparent text-white border-none outline-none text-xs w-full font-sans placeholder-white/40"
+                    />
+                    {spotlightQuery && (
+                      <button
+                        onClick={() => {
+                          setSpotlightQuery('')
+                          setSpotlightResults([])
+                        }}
+                        className="text-white/40 hover:text-white text-[10px] px-1 focus:outline-none"
+                      >
+                        ✕
+                      </button>
+                    )}
+                    {spotlightLoading && (
+                      <div className="w-3.5 h-3.5 border border-[#C6FF33] border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="flex items-center gap-4 flex-1 justify-end flex-shrink-0">
+              <button className="opacity-60 hover:opacity-100 transition-opacity"><TicketIcon /></button>
+              <button className="opacity-60 hover:opacity-100 transition-opacity relative">
+                <BellIcon />
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#C6FF33] border-2 border-[#0f0f10]" />
+              </button>
+              <button className="opacity-60 hover:opacity-100 transition-opacity"><SettingsIcon /></button>
+              <img
+                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80"
+                alt="Profile"
+                className="w-8 h-8 rounded-full object-cover border border-white/10 flex-shrink-0"
+              />
+            </div>
+          </div>
+
+          {/* Page content */}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {renderPageContent()}
+          </div>
+
+          {/* Bottom player */}
+          <BottomPlayer
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            onTogglePlay={handleTogglePlay}
+            isLiked={likedTrackIds.includes(currentTrack.id)}
+            onToggleLike={() => handleToggleLike(currentTrack.id)}
+            currentTime={currentTime}
+            duration={duration}
+            onSeek={handleSeek}
+            volume={volume}
+            onVolumeChange={setVolume}
+            isShuffle={isShuffle}
+            onToggleShuffle={() => setIsShuffle(!isShuffle)}
+            isRepeat={isRepeat}
+            onToggleRepeat={() => setIsRepeat(!isRepeat)}
+            onNext={handleNextTrack}
+            onPrev={handlePrevTrack}
+            showLyrics={showLyrics}
+            onToggleLyrics={() => setShowLyrics(v => !v)}
+            hasLyrics={lyrics.length > 0}
+            showNowPlaying={showNowPlaying}
+            onToggleNowPlaying={() => setShowNowPlaying(v => !v)}
+            onNavigateArtist={handleNavigateArtistByName}
+          />
         </div>
 
-        {/* Bottom player */}
-        <BottomPlayer 
-          currentTrack={currentTrack}
-          isPlaying={isPlaying}
-          onTogglePlay={handleTogglePlay}
-          isLiked={likedTrackIds.includes(currentTrack.id)}
-          onToggleLike={() => handleToggleLike(currentTrack.id)}
-          currentTime={currentTime}
-          duration={duration}
-          onSeek={handleSeek}
-          volume={volume}
-          onVolumeChange={setVolume}
-          isShuffle={isShuffle}
-          onToggleShuffle={() => setIsShuffle(!isShuffle)}
-          isRepeat={isRepeat}
-          onToggleRepeat={() => setIsRepeat(!isRepeat)}
-          onNext={handleNextTrack}
-          onPrev={handlePrevTrack}
-          showLyrics={showLyrics}
-          onToggleLyrics={() => setShowLyrics(v => !v)}
-          hasLyrics={lyrics.length > 0}
-          showNowPlaying={showNowPlaying}
-          onToggleNowPlaying={() => setShowNowPlaying(v => !v)}
-          onNavigateArtist={handleNavigateArtistByName}
-        />
+        {/* Now Playing Side Panel */}
+        {showNowPlaying && (
+          <NowPlayingPanel
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            onTogglePlay={handleTogglePlay}
+            currentTime={currentTime}
+            duration={duration}
+            onSeek={handleSeek}
+            isShuffle={isShuffle}
+            onToggleShuffle={() => setIsShuffle(!isShuffle)}
+            isRepeat={isRepeat}
+            onToggleRepeat={() => setIsRepeat(!isRepeat)}
+            onNext={handleNextTrack}
+            onPrev={handlePrevTrack}
+            lyrics={lyrics}
+            activeLyricIdx={activeLyricIdx}
+            queue={queue}
+            queueIndex={queueIndex}
+            onPlayTrackFromQueue={handlePlayTrack}
+            onClose={() => setShowNowPlaying(false)}
+            onNavigateArtist={handleNavigateArtistByName}
+          />
+        )}
+
+        {/* Lyrics overlay */}
+        {showLyrics && (
+          <LyricsView
+            lyrics={lyrics}
+            activeLyricIdx={activeLyricIdx}
+            hasSync={lyricsHasSync}
+            track={currentTrack}
+            onClose={() => setShowLyrics(false)}
+          />
+        )}
       </div>
-
-      {/* Now Playing Side Panel */}
-      {showNowPlaying && (
-        <NowPlayingPanel
-          currentTrack={currentTrack}
-          isPlaying={isPlaying}
-          onTogglePlay={handleTogglePlay}
-          currentTime={currentTime}
-          duration={duration}
-          onSeek={handleSeek}
-          isShuffle={isShuffle}
-          onToggleShuffle={() => setIsShuffle(!isShuffle)}
-          isRepeat={isRepeat}
-          onToggleRepeat={() => setIsRepeat(!isRepeat)}
-          onNext={handleNextTrack}
-          onPrev={handlePrevTrack}
-          lyrics={lyrics}
-          activeLyricIdx={activeLyricIdx}
-          queue={queue}
-          queueIndex={queueIndex}
-          onPlayTrackFromQueue={handlePlayTrack}
-          onClose={() => setShowNowPlaying(false)}
-          onNavigateArtist={handleNavigateArtistByName}
-        />
-      )}
-
-      {/* Lyrics overlay */}
-      {showLyrics && (
-        <LyricsView
-          lyrics={lyrics}
-          activeLyricIdx={activeLyricIdx}
-          hasSync={lyricsHasSync}
-          track={currentTrack}
-          onClose={() => setShowLyrics(false)}
-        />
-      )}
-    </div>
     </AppContext.Provider>
   )
 }

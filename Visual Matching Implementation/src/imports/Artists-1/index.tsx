@@ -179,7 +179,7 @@ function Container4() {
 
 function Background1() {
   return (
-    <div className="bg-[#e2fb5e] col-[9/span_4] content-stretch flex flex-col h-[303px] items-start p-[32px] relative rounded-[24px] row-1 self-start shrink-0 w-[302.667px]" data-name="Background">
+    <div className="bg-[#C6FF33] col-[9/span_4] content-stretch flex flex-col h-[303px] items-start p-[32px] relative rounded-[24px] row-1 self-start shrink-0 w-[302.667px]" data-name="Background">
       <Container3 />
       <Container4 />
     </div>
@@ -209,7 +209,7 @@ function Ab6AXuDlqwZ7FqJk2W9RgnEsCrvh6SPHhDmfZl7UzyClEijNzSg0VVsaJ31NqEuOyLOfFTn
 function Border() {
   return (
     <div className="content-stretch flex flex-col items-start justify-center p-[8px] relative rounded-[9999px] shrink-0 size-[128px]" data-name="Border">
-      <div aria-hidden className="absolute border-4 border-[#e2fb5e] border-solid inset-0 pointer-events-none rounded-[9999px]" />
+      <div aria-hidden className="absolute border-4 border-[#C6FF33] border-solid inset-0 pointer-events-none rounded-[9999px]" />
       <div className="-translate-y-1/2 absolute bg-[rgba(255,255,255,0)] left-0 rounded-[9999px] shadow-[0px_25px_50px_-12px_rgba(0,0,0,0.25)] size-[128px] top-1/2" data-name="Overlay+Shadow" />
       <Ab6AXuDlqwZ7FqJk2W9RgnEsCrvh6SPHhDmfZl7UzyClEijNzSg0VVsaJ31NqEuOyLOfFTn0FTr5S1VsJ6SLYeMkM3R72KmagcB20QLz2GiQ8HJsjmDfeaIcc3ZImoodGsjrRxkzKbm2Pt0N81RDwavGpLAnZwV0W2M76Yvxln3UyZeCbsrWponxLi9WVpc8HBkRfTYfuFpnca9FArT3GNbc4E9FbCckp1PBiEd8GQ8WMlhK3HHoYl5VqjFoSxR0Pd8ZIaWr />
     </div>
@@ -329,7 +329,7 @@ function Heading3() {
 function Link() {
   return (
     <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Link">
-      <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold h-[16px] justify-center leading-[0] not-italic relative shrink-0 text-[#e2fb5e] text-[12px] uppercase w-[57.45px]">
+      <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold h-[16px] justify-center leading-[0] not-italic relative shrink-0 text-[#C6FF33] text-[12px] uppercase w-[57.45px]">
         <p className="leading-[16px]">View All</p>
       </div>
     </div>
@@ -777,7 +777,7 @@ function Container48() {
     <div className="relative shrink-0 size-[16px]" data-name="Container">
       <svg className="absolute block inset-0 size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 16 16">
         <g id="Container">
-          <path d={svgPaths.p85bff00} fill="var(--fill-0, #E2FB5E)" id="Icon" />
+          <path d={svgPaths.p85bff00} fill="var(--fill-0, #C6FF33)" id="Icon" />
         </g>
       </svg>
     </div>
@@ -787,7 +787,7 @@ function Container48() {
 function Container49() {
   return (
     <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Container">
-      <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold justify-center leading-[0] not-italic relative shrink-0 text-[#e2fb5e] text-[14px] whitespace-nowrap">
+      <div className="[word-break:break-word] flex flex-col font-['Inter:Bold',sans-serif] font-bold justify-center leading-[0] not-italic relative shrink-0 text-[#C6FF33] text-[14px] whitespace-nowrap">
         <p className="leading-[20px]">ARTISTS</p>
       </div>
     </div>
@@ -1257,7 +1257,7 @@ function Container67() {
     <div className="content-stretch flex gap-[32px] items-center relative shrink-0" data-name="Container">
       <Button2 />
       <Button3 />
-      <button className="bg-[#e2fb5e] content-stretch cursor-pointer flex items-center justify-center relative rounded-[9999px] shrink-0 size-[47px]" data-name="State">
+      <button className="bg-[#C6FF33] content-stretch cursor-pointer flex items-center justify-center relative rounded-[9999px] shrink-0 size-[47px]" data-name="State">
         <div className="-translate-y-1/2 absolute bg-[rgba(255,255,255,0)] left-0 rounded-[9999px] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)] size-[48px] top-[calc(50%+0.5px)]" data-name="Button:shadow" />
         <Container70 />
       </button>
@@ -1280,7 +1280,7 @@ function Container74() {
 function Overlay2() {
   return (
     <div className="bg-[rgba(255,255,255,0.1)] flex-[1_0_0] h-[4px] min-w-px overflow-clip relative rounded-[9999px]" data-name="Overlay">
-      <div className="absolute bg-[#e2fb5e] inset-[0_55%_0_0]" data-name="Background" />
+      <div className="absolute bg-[#C6FF33] inset-[0_55%_0_0]" data-name="Background" />
     </div>
   );
 }
@@ -1486,7 +1486,7 @@ function Button8() {
   return (
     <div className="-translate-y-1/2 absolute content-stretch flex flex-col items-center justify-center left-[52px] p-[8px] top-[calc(50%+0.5px)]" data-name="Button">
       <Container81 />
-      <div className="absolute bg-[#e2fb5e] right-[7.98px] rounded-[9999px] size-[8px] top-[8px]" data-name="Background" />
+      <div className="absolute bg-[#C6FF33] right-[7.98px] rounded-[9999px] size-[8px] top-[8px]" data-name="Background" />
     </div>
   );
 }

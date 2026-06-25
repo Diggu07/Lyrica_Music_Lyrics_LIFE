@@ -63,6 +63,12 @@ const HeartIcon = ({ active }: { active: boolean }) => (
   </svg>
 )
 
+const SearchIcon = ({ active }: { active: boolean }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke={active ? 'var(--primary)' : 'white'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeOpacity={active ? 1 : 0.6} />
+  </svg>
+)
+
 const SortIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
     <path d="M4 6H20M4 12H15M4 18H10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeOpacity={0.4} />
@@ -73,6 +79,7 @@ const SortIcon = () => (
 export function Sidebar({ currentPage, onNavigate, playlists, onCreatePlaylist, allTracks = [] }: SidebarProps) {
   const navItems = [
     { id: 'home' as Page, label: 'HOME', icon: <HomeIcon active={currentPage === 'home'} /> },
+    { id: 'search' as Page, label: 'SEARCH', icon: <SearchIcon active={currentPage === 'search'} /> },
     { id: 'library' as Page, label: 'LIBRARY', icon: <LibraryIcon active={currentPage === 'library'} /> },
     { id: 'artists' as Page, label: 'ARTISTS', icon: <ArtistsIcon active={currentPage === 'artists'} /> },
     { id: 'albums' as Page, label: 'ALBUMS', icon: <AlbumsIcon active={currentPage === 'albums'} /> },

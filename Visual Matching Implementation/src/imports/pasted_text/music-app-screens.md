@@ -6,7 +6,7 @@ Global design system:
 - Brand: LYRICA.
 - Style: dark premium music dashboard, glass panels, subtle borders, lime accent.
 - Background: #0f0f10.
-- Accent color: #e2fb5e.
+- Accent color: #C6FF33.
 - Font: Inter.
 - Use uppercase bold/black headings with slight letter spacing.
 - Use muted text #78716c and dim text rgba(255,255,255,0.6).

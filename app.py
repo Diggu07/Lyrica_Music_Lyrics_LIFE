@@ -49,7 +49,7 @@ artist_bp = try_import("routes.artist_routes", "artist_bp")
 
 def create_app():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    frontend_dir = os.path.join(base_dir, "Visual Matching Implementation", "dist")  # the folder containing index.html (or your build)
+    frontend_dir = os.path.join(base_dir, "Lyrica", "dist")  # the folder containing index.html (or your build)
     songs_dir = os.path.join(base_dir, "static", "songs")
 
     app = Flask(

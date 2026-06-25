@@ -34,7 +34,7 @@ export const PlaylistPopover: React.FC<PlaylistPopoverProps> = ({ track, showTex
       setError(null)
       setIsCreating(false)
       setNewPlaylistName('')
-      
+
       // Calculate boundary placement
       if (triggerRef.current) {
         const rect = triggerRef.current.getBoundingClientRect()
@@ -164,9 +164,8 @@ export const PlaylistPopover: React.FC<PlaylistPopoverProps> = ({ track, showTex
           cursor: 'pointer',
           transition: 'all 150ms ease-out',
         }}
-        className={`flex items-center justify-center gap-2 text-stone-400 hover:text-white ${
-          isOpen ? 'bg-white/10' : 'bg-transparent hover:bg-white/5'
-        } ${isLiked && !showText ? 'text-[#E2FB5E]' : ''}`}
+        className={`flex items-center justify-center gap-2 text-stone-400 hover:text-white ${isOpen ? 'bg-white/10' : 'bg-transparent hover:bg-white/5'
+          } ${isLiked && !showText ? 'text-[#C6FF33]' : ''}`}
       >
         <svg width="18" height="18" viewBox="0 0 16 15" fill="none">
           {isLiked ? (
@@ -217,7 +216,7 @@ export const PlaylistPopover: React.FC<PlaylistPopoverProps> = ({ track, showTex
             <svg width="14" height="13" viewBox="0 0 16 15" fill="none">
               <path
                 d="M7.995 15.2483L6.83572 14.168C5.4899 12.9077 4.37726 11.8205 3.49781 10.9064C2.61836 9.99238 1.9188 9.1718 1.39912 8.44471C0.879449 7.71761 0.516343 7.04937 0.309806 6.44C0.103269 5.83062 0 5.2074 0 4.57032C0 3.26847 0.419737 2.18129 1.25921 1.30877C2.09869 0.436258 3.1447 0 4.39725 0C5.09015 0 5.74973 0.152344 6.37601 0.457032C7.00228 0.76172 7.54195 1.19105 7.995 1.74503C8.44804 1.19105 8.98771 0.76172 9.61398 0.457032C10.2403 0.152344 10.8998 0 11.5927 0C12.8453 0 13.8913 0.436258 14.7308 1.30877C15.5703 2.18129 15.99 3.26847 15.99 4.57032C15.99 5.2074 15.8867 5.83062 15.6802 6.44C15.4736 7.04937 15.1105 7.71761 14.5909 8.44471C14.0712 9.1718 13.3716 9.99238 12.4922 10.9064C11.6127 11.8205 10.5001 12.9077 9.15427 14.168L7.995 15.2483Z"
-                fill={isLiked ? '#E2FB5E' : 'rgba(255,255,255,0.4)'}
+                fill={isLiked ? '#C6FF33' : 'rgba(255,255,255,0.4)'}
               />
             </svg>
           </button>
@@ -250,8 +249,8 @@ export const PlaylistPopover: React.FC<PlaylistPopoverProps> = ({ track, showTex
                         width: 14,
                         height: 14,
                         borderRadius: 3,
-                        border: isInPlaylist ? '1px solid #E2FB5E' : '1px solid rgba(255,255,255,0.2)',
-                        background: isInPlaylist ? '#E2FB5E' : 'transparent',
+                        border: isInPlaylist ? '1px solid #C6FF33' : '1px solid rgba(255,255,255,0.2)',
+                        background: isInPlaylist ? '#C6FF33' : 'transparent',
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -279,7 +278,7 @@ export const PlaylistPopover: React.FC<PlaylistPopoverProps> = ({ track, showTex
                 setIsCreating(true)
               }}
               disabled={isLoading}
-              className="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-xs text-[#E2FB5E] hover:bg-white/5 transition-colors text-left font-semibold"
+              className="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-xs text-[#C6FF33] hover:bg-white/5 transition-colors text-left font-semibold"
             >
               <span>+ Create Playlist</span>
             </button>
@@ -292,13 +291,13 @@ export const PlaylistPopover: React.FC<PlaylistPopoverProps> = ({ track, showTex
                 onChange={(e) => setNewPlaylistName(e.target.value)}
                 placeholder="Playlist name..."
                 disabled={isLoading}
-                className="flex-1 bg-white/5 text-white border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-[#E2FB5E] transition-colors"
+                className="flex-1 bg-white/5 text-white border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-[#C6FF33] transition-colors"
                 style={{ fontFamily: 'Inter, sans-serif' }}
               />
               <button
                 type="submit"
                 disabled={!newPlaylistName.trim() || isLoading}
-                className="p-1 rounded bg-[#E2FB5E] text-black hover:opacity-95 transition-opacity disabled:opacity-50"
+                className="p-1 rounded bg-[#C6FF33] text-black hover:opacity-95 transition-opacity disabled:opacity-50"
                 title="Confirm"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">

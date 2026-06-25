@@ -322,8 +322,8 @@ def _normalize_saavn_song(song: dict) -> dict:
     images = song.get("image", [])
     cover = ""
     if isinstance(images, list) and images:
-        # saavn.dev returns [{quality, url}, ...] sorted low→high
-        cover = images[-1].get("url", "") if isinstance(images[-1], dict) else str(images[-1])
+        last_img = images[-1]
+        cover = last_img.get("url", "") if isinstance(last_img, dict) else str(last_img)
     elif isinstance(images, str):
         cover = images
 
@@ -331,7 +331,6 @@ def _normalize_saavn_song(song: dict) -> dict:
     download_urls = song.get("downloadUrl", [])
     stream_url = ""
     if isinstance(download_urls, list) and download_urls:
-        # Pick 160kbps or highest available
         for q in ("160kbps", "128kbps", "96kbps", "48kbps"):
             match = next((d for d in download_urls if d.get("quality") == q), None)
             if match:
@@ -353,249 +352,340 @@ def _normalize_saavn_song(song: dict) -> dict:
 
     # Artist name(s)
     artists = song.get("artists", {})
-    primary = artists.get("primary", []) if isinstance(artists, dict) else []
-    artist_name = ", ".join(a.get("name", "") for a in primary) if primary else song.get("primaryArtists", "Unknown")
+    if isinstance(artists, dict):
+        primary = artists.get("primary", [])
+        artist_name = ", ".join(a.get("name", "") for a in primary) if primary else song.get("primaryArtists", "Unknown")
+    else:
+        artist_name = song.get("primaryArtists", song.get("singers", "Unknown"))
+        if isinstance(artist_name, list):
+            artist_name = ", ".join(artist_name)
+
+    album_name = ""
+    album_data = song.get("album", "")
+    if isinstance(album_data, dict):
+        album_name = album_data.get("name", "")
+    elif isinstance(album_data, str):
+        album_name = album_data
 
     return {
-        "id": song.get("id", ""),
+        "id": f"saavn_{song.get('id', '')}",
+        "rawId": song.get("id", ""),
         "saavn_id": song.get("id", ""),
+        "type": "track",
         "title": song.get("name", song.get("title", "Unknown")),
         "artist": artist_name,
-        "album": song.get("album", {}).get("name", "") if isinstance(song.get("album"), dict) else song.get("album", ""),
+        "album": album_name,
         "cover": cover,
         "duration": duration_str,
         "duration_secs": dur_secs,
         "source": "saavn",
-        # Provide direct stream_url inline (for featured/trending so player can start immediately)
         "stream_url": stream_url,
         "language": song.get("language", ""),
     }
 
 
-def _yt_search_fallback(query: str, limit: int = 10) -> list:
-    """Search YouTube as a fallback, optimized to act as YT Music by prioritizing official audio/topic channels."""
+def _normalize_saavn_album(album: dict) -> dict:
+    images = album.get("image", [])
+    cover = ""
+    if isinstance(images, list) and images:
+        last_img = images[-1]
+        cover = last_img.get("url", "") if isinstance(last_img, dict) else str(last_img)
+    elif isinstance(images, str):
+        cover = images
+
+    artists = album.get("artists", {})
+    if isinstance(artists, dict):
+        primary = artists.get("primary", [])
+        artist_name = ", ".join(a.get("name", "") for a in primary) if primary else "Various Artists"
+    else:
+        artist_name = album.get("primaryArtists", "Various Artists")
+        if isinstance(artist_name, list):
+            artist_name = ", ".join(artist_name)
+
+    return {
+        "id": f"saavn_album_{album.get('id', '')}",
+        "rawId": album.get("id", ""),
+        "type": "album",
+        "title": album.get("name", album.get("title", "Unknown")),
+        "subtitle": artist_name,
+        "cover": cover,
+        "source": "saavn",
+        "year": album.get("year", "")
+    }
+
+
+def _normalize_saavn_playlist(playlist: dict) -> dict:
+    images = playlist.get("image", [])
+    cover = ""
+    if isinstance(images, list) and images:
+        last_img = images[-1]
+        cover = last_img.get("url", "") if isinstance(last_img, dict) else str(last_img)
+    elif isinstance(images, str):
+        cover = images
+        
+    return {
+        "id": f"saavn_playlist_{playlist.get('id', '')}",
+        "rawId": playlist.get("id", ""),
+        "type": "playlist",
+        "title": playlist.get("name", playlist.get("title", "Unknown")),
+        "subtitle": f"Playlist • {playlist.get('subtitle', 'JioSaavn')}",
+        "cover": cover,
+        "source": "saavn"
+    }
+
+
+def _normalize_saavn_artist(artist: dict) -> dict:
+    images = artist.get("image", [])
+    cover = ""
+    if isinstance(images, list) and images:
+        last_img = images[-1]
+        cover = last_img.get("url", "") if isinstance(last_img, dict) else str(last_img)
+    elif isinstance(images, str):
+        cover = images
+        
+    return {
+        "id": f"saavn_artist_{artist.get('id', '')}",
+        "rawId": artist.get("id", ""),
+        "type": "artist",
+        "title": artist.get("name", artist.get("title", "Unknown")),
+        "subtitle": artist.get("description", "Artist"),
+        "cover": cover,
+        "source": "saavn"
+    }
+
+
+def _yt_search_unified(query: str, type_param: str, limit: int = 20) -> list:
     if not YT_API_KEY:
+        print("[music] YouTube API key is missing.")
         return []
 
-    EXCLUDE_KEYWORDS = [
-        'full concert', 'live concert', 'live show', 'live performance',
-        'full show', 'live at ', ' | live', 'live from', 'official live',
-        'award show', 'awards show', 'reaction', 'interview',
-        'behind the scenes', 'making of', 'documentary', 'movie trailer',
-        'stand up', 'podcast', 'full episode', 'full video)', 'reacts', 'react'
-    ]
+    yt_type = "video"
+    video_category = None
+    q_suffix = ""
+    
+    if type_param == "tracks":
+        yt_type = "video"
+        video_category = "10"  # Music category
+    elif type_param == "playlists":
+        yt_type = "playlist"
+    elif type_param == "artists":
+        yt_type = "channel"
+    elif type_param == "albums":
+        yt_type = "playlist"
+        q_suffix = " album"
+    else:  # 'all'
+        yt_type = "video,playlist,channel"
 
+    full_query = query + q_suffix
+    
     try:
         url = "https://www.googleapis.com/youtube/v3/search"
         params = {
             "part": "snippet",
-            "type": "video",
-            "q": f"{query} YouTube Music",          # bias toward YouTube Music uploads
+            "type": yt_type,
+            "q": full_query,
             "key": YT_API_KEY,
-            "maxResults": 25,                       # fetch enough results to sort & filter
-            "videoCategoryId": "10",                # Music category only
+            "maxResults": min(limit * 2, 40),
         }
-        r = requests.get(url, params=params, timeout=8)
-        if not r.ok:
-            return []
-        items = r.json().get("items", [])
+        if video_category and yt_type == "video":
+            params["videoCategoryId"] = video_category
+
+        r = requests.get(url, params=params, timeout=10)
         
-        scored_results = []
+        # Fallback trigger: return empty list on quota/other API failures
+        if r.status_code == 403:
+            print("[music] YouTube API rate limit exceeded or forbidden (403).")
+            return []
+        if not r.ok:
+            print(f"[music] YouTube API error: {r.status_code} {r.text}")
+            return []
+
+        items = r.json().get("items", [])
+        results = []
+        
+        exclude_album_keywords = ["best of", "greatest hits", "playlist", "mix", "collection", "hits", "fan-made"]
+        
         for item in items:
-            vid = item.get("id", {}).get("videoId", "")
+            kind = item.get("id", {}).get("kind", "")
             snippet = item.get("snippet", {})
             title = snippet.get("title", "")
-            channel_title = snippet.get("channelTitle", "")
-            thumb = snippet.get("thumbnails", {}).get("medium", {}).get("url", "")
-            
             title_lower = title.lower()
-            channel_lower = channel_title.lower()
+            channel_title = snippet.get("channelTitle", "")
+            thumb = snippet.get("thumbnails", {}).get("medium", {}).get("url", "") or snippet.get("thumbnails", {}).get("default", {}).get("url", "")
             
-            # Filter out obvious non-song video content
-            if any(kw in title_lower for kw in EXCLUDE_KEYWORDS):
-                continue
+            if "youtube#video" in kind:
+                vid = item["id"]["videoId"]
+                results.append({
+                    "id": f"yt_{vid}",
+                    "rawId": vid,
+                    "type": "track",
+                    "title": title,
+                    "subtitle": channel_title.replace(" - Topic", "") if channel_title.endswith(" - Topic") else channel_title,
+                    "cover": thumb,
+                    "source": "youtube",
+                    "videoId": vid,
+                    "duration": "0:00"
+                })
+            
+            elif "youtube#channel" in kind:
+                cid = item["id"]["channelId"]
+                results.append({
+                    "id": f"yt_artist_{cid}",
+                    "rawId": cid,
+                    "type": "artist",
+                    "title": title,
+                    "subtitle": "Artist • YouTube",
+                    "cover": thumb,
+                    "source": "youtube"
+                })
                 
-            # Score results to put the official audio at the top
-            score = 100
-            
-            # Prioritize exact match of query
-            query_words = query.lower().split()
-            matching_words = sum(1 for w in query_words if w in title_lower)
-            score += matching_words * 20
-            
-            if query.lower() in title_lower:
-                score += 100
+            elif "youtube#playlist" in kind:
+                pid = item["id"]["playlistId"]
                 
-            # High priority for official Topic channels (YouTube Music auto-generated)
-            if "topic" in channel_lower:
-                score += 150
-            if "vevo" in channel_lower:
-                score += 80
-                
-            # Priority for official tags in title
-            if "official audio" in title_lower or "official lyric" in title_lower:
-                score += 90
-            elif "audio" in title_lower:
-                score += 60
-            elif "official music video" in title_lower or "official video" in title_lower:
-                score += 40
-            
-            # Penalize cover, remix or reactions just in case they slipped past keyword filter
-            if "cover" in title_lower or "remix" in title_lower:
-                score -= 80
+                if type_param == "albums":
+                    has_album_kw = any(kw in title_lower for kw in ["album", "ep", "lp", "l.p."])
+                    has_exclude_kw = any(kw in title_lower for kw in exclude_album_keywords)
+                    
+                    if not has_album_kw or has_exclude_kw:
+                        continue
+                    
+                    results.append({
+                        "id": f"yt_album_{pid}",
+                        "rawId": pid,
+                        "type": "album",
+                        "title": title.replace(" - Album", "").replace(" album", ""),
+                        "subtitle": channel_title,
+                        "cover": thumb,
+                        "source": "youtube"
+                    })
+                else:
+                    results.append({
+                        "id": f"yt_playlist_{pid}",
+                        "rawId": pid,
+                        "type": "playlist",
+                        "title": title,
+                        "subtitle": f"Playlist • {channel_title}",
+                        "cover": thumb,
+                        "source": "youtube"
+                    })
 
-            scored_results.append((score, {
-                "id": f"yt_{vid}",
-                "saavn_id": None,
-                "title": title,
-                "artist": channel_title.replace(" - Topic", "") if channel_title.endswith(" - Topic") else channel_title,
-                "album": "",
-                "cover": thumb,
-                "duration": "",
-                "duration_secs": 0,
-                "source": "youtube",
-                "videoId": vid,
-                "stream_url": None,
-            }))
-            
-        # Sort by score descending
-        scored_results.sort(key=lambda x: x[0], reverse=True)
-        
-        # Return top results up to limit
-        return [item[1] for item in scored_results[:limit]]
+        return results[:limit]
     except Exception as e:
-        print(f"[music] YT fallback error: {e}")
+        print(f"[music] YouTube search error: {e}")
         return []
 
 
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
-@bp.route("/tracks", methods=["GET"])
-def list_tracks():
-    """
-    Returns featured/trending tracks from JioSaavn.
-    Used as the default track list when the app loads.
-    """
-    try:
-        # Fetch trending songs — use a popular Hindi playlist/chart
-        r = requests.get(f"{SAAVN_BASE}/search/songs", params={
-            "query": "bollywood hits 2024",
-            "limit": 20,
-            "page": 1,
-        }, timeout=10)
-
-        if r.ok:
-            data = r.json()
-            songs = (data.get("data") or {}).get("results", [])
-            if songs:
-                tracks = [_normalize_saavn_song(s) for s in songs]
-                return jsonify({"tracks": tracks}), 200
-
-        # Fallback to a curated query if first fails
-        r2 = requests.get(f"{SAAVN_BASE}/search/songs", params={
-            "query": "arijit singh best songs",
-            "limit": 20,
-        }, timeout=10)
-        if r2.ok:
-            data2 = r2.json()
-            songs2 = (data2.get("data") or {}).get("results", [])
-            tracks2 = [_normalize_saavn_song(s) for s in songs2]
-            return jsonify({"tracks": tracks2}), 200
-
-    except Exception as e:
-        print(f"[music] JioSaavn /tracks failed: {e}")
-
-    # Fallback to YouTube trending tracks
-    print("[music] JioSaavn /tracks returned empty or failed; falling back to YouTube trending search...")
-    try:
-        yt_tracks = _yt_search_fallback("trending songs 2024", limit=20)
-        if yt_tracks:
-            return jsonify({"tracks": yt_tracks}), 200
-    except Exception as e:
-        print(f"[music] YouTube fallback failed for /tracks: {e}")
-
-    # Hardcoded curated high-fidelity fallback list if everything else fails
-    fallback_curated = [
-        {"id": "yt_Umqb9KENgmg", "saavn_id": None, "title": "Tum Hi Ho", "artist": "Arijit Singh", "cover": "https://img.youtube.com/vi/Umqb9KENgmg/0.jpg", "album": "Aashiqui 2", "duration": "4:22", "duration_secs": 262, "source": "youtube", "videoId": "Umqb9KENgmg"},
-        {"id": "yt_VAdGW7QDJiU", "saavn_id": None, "title": "Chaleya", "artist": "Anirudh Ravichander, Arijit Singh", "cover": "https://img.youtube.com/vi/VAdGW7QDJiU/0.jpg", "album": "Jawan", "duration": "3:20", "duration_secs": 200, "source": "youtube", "videoId": "VAdGW7QDJiU"},
-        {"id": "yt_RLzC55DXmsI", "saavn_id": None, "title": "Heeriye", "artist": "Jasleen Royal, Arijit Singh", "cover": "https://img.youtube.com/vi/RLzC55DXmsI/0.jpg", "album": "Heeriye Single", "duration": "3:14", "duration_secs": 194, "source": "youtube", "videoId": "RLzC55DXmsI"},
-        {"id": "yt_sK7riqg2mr4", "saavn_id": None, "title": "Agar Tum Saath Ho", "artist": "Alka Yagnik, Arijit Singh", "cover": "https://img.youtube.com/vi/sK7riqg2mr4/0.jpg", "album": "Tamasha", "duration": "5:41", "duration_secs": 341, "source": "youtube", "videoId": "sK7riqg2mr4"},
-        {"id": "yt_2Vv-BfVoq4g", "saavn_id": None, "title": "Perfect", "artist": "Ed Sheeran", "cover": "https://img.youtube.com/vi/2Vv-BfVoq4g/0.jpg", "album": "Divide", "duration": "4:23", "duration_secs": 263, "source": "youtube", "videoId": "2Vv-BfVoq4g"},
-        {"id": "yt_JGwWNGJdvx8", "saavn_id": None, "title": "Shape of You", "artist": "Ed Sheeran", "cover": "https://img.youtube.com/vi/JGwWNGJdvx8/0.jpg", "album": "Divide", "duration": "3:53", "duration_secs": 233, "source": "youtube", "videoId": "JGwWNGJdvx8"},
-        {"id": "yt_4NRXx6U8ABQ", "saavn_id": None, "title": "Blinding Lights", "artist": "The Weeknd", "cover": "https://img.youtube.com/vi/4NRXx6U8ABQ/0.jpg", "album": "After Hours", "duration": "3:20", "duration_secs": 200, "source": "youtube", "videoId": "4NRXx6U8ABQ"},
-        {"id": "yt_LL7Q0U19vsc", "saavn_id": None, "title": "Snowfall", "artist": "Oneheart, Reidenshi", "cover": "https://img.youtube.com/vi/LL7Q0U19vsc/0.jpg", "album": "Snowfall", "duration": "3:20", "duration_secs": 200, "source": "youtube", "videoId": "LL7Q0U19vsc"}
-    ]
-    return jsonify({"tracks": fallback_curated}), 200
+def _yt_search_fallback(query: str, limit: int = 10) -> list:
+    """Fallback search targeting tracks specifically."""
+    return _yt_search_unified(query, "tracks", limit)
 
 
 @bp.route("/search", methods=["GET"])
 def search_tracks():
     """
-    Search for tracks. Tries JioSaavn first; falls back to YouTube if no results.
-    GET /api/music/search?q=<query>&limit=10&source=<saavn|youtube>
+    Search endpoint that serves JioSaavn or YouTube results, normalized and cached.
+    GET /api/music/search?q=<query>&limit=20&source=<saavn|youtube>&type=<all|tracks|albums|playlists|artists>
     """
     query = request.args.get("q", "").strip()
     source_param = request.args.get("source", "saavn").strip().lower()
-    limit = min(int(request.args.get("limit", 10)), 30)
+    type_param = request.args.get("type", "all").strip().lower()
+    limit = min(int(request.args.get("limit", 20)), 30)
 
     if not query:
         return jsonify({"results": [], "source": "none"}), 200
 
-    # --- YouTube / YT Music Mode ---
-    if source_param == "youtube":
-        print(f"[music] YT Music search requested directly for '{query}'")
-        yt_results = _yt_search_fallback(query, limit)
+    # Retrieve database and ensure TTL index on search cache
+    db = get_db()
+    db.search_cache.create_index("createdAt", expireAfterSeconds=3600)
+
+    # Lookup cache
+    cache_key = f"{query.lower().strip()}:{source_param}:{type_param}"
+    cached_doc = db.search_cache.find_one({"key": cache_key})
+    if cached_doc:
         return jsonify({
-            "results": yt_results,
-            "source": "youtube" if yt_results else "none"
+            "results": cached_doc["results"],
+            "source": cached_doc["source"],
+            "cached": True
         }), 200
 
-    # --- JioSaavn Mode ---
-    if source_param == "saavn":
-        try:
-            r = requests.get(f"{SAAVN_BASE}/search/songs", params={
-                "query": query,
-                "limit": limit,
-                "page": 1,
-            }, timeout=10)
+    results = []
+    actual_source = source_param
 
-            if r.ok:
-                data = r.json()
-                songs = (data.get("data") or {}).get("results", [])
-                if songs:
-                    tracks = [_normalize_saavn_song(s) for s in songs]
-                    return jsonify({"results": tracks, "source": "saavn"}), 200
+    # --- YouTube / YT Music Mode ---
+    if source_param == "youtube":
+        print(f"[music] YT Music search: q='{query}', type='{type_param}'")
+        results = _yt_search_unified(query, type_param, limit)
+        # Quota/Fallback check: If YouTube fails, automatically fallback to JioSaavn
+        if not results:
+            print(f"[music] YouTube search empty or failed. Falling back to JioSaavn for '{query}'")
+            actual_source = "saavn"
+
+    # --- JioSaavn Mode / Fallback ---
+    if actual_source == "saavn":
+        try:
+            if type_param == "all":
+                # Multi-type search
+                r = requests.get(f"{SAAVN_BASE}/search", params={"query": query}, timeout=10)
+                if r.ok:
+                    data = r.json().get("data", {}) or {}
+                    # Normalize each category
+                    songs_data = (data.get("songs") or {}).get("results", [])
+                    albums_data = (data.get("albums") or {}).get("results", [])
+                    playlists_data = (data.get("playlists") or {}).get("results", [])
+                    artists_data = (data.get("artists") or {}).get("results", [])
+
+                    norm_songs = [_normalize_saavn_song(s) for s in songs_data[:8]]
+                    norm_albums = [_normalize_saavn_album(a) for a in albums_data[:6]]
+                    norm_playlists = [_normalize_saavn_playlist(p) for p in playlists_data[:6]]
+                    norm_artists = [_normalize_saavn_artist(art) for art in artists_data[:6]]
+
+                    results = norm_songs + norm_albums + norm_playlists + norm_artists
+            elif type_param == "tracks":
+                r = requests.get(f"{SAAVN_BASE}/search/songs", params={"query": query, "limit": limit}, timeout=10)
+                if r.ok:
+                    songs = r.json().get("data", {}).get("results", [])
+                    results = [_normalize_saavn_song(s) for s in songs]
+            elif type_param == "albums":
+                r = requests.get(f"{SAAVN_BASE}/search/albums", params={"query": query, "limit": limit}, timeout=10)
+                if r.ok:
+                    albums = r.json().get("data", {}).get("results", [])
+                    results = [_normalize_saavn_album(a) for a in albums]
+            elif type_param == "playlists":
+                r = requests.get(f"{SAAVN_BASE}/search/playlists", params={"query": query, "limit": limit}, timeout=10)
+                if r.ok:
+                    playlists = r.json().get("data", {}).get("results", [])
+                    results = [_normalize_saavn_playlist(p) for p in playlists]
+            elif type_param == "artists":
+                r = requests.get(f"{SAAVN_BASE}/search/artists", params={"query": query, "limit": limit}, timeout=10)
+                if r.ok:
+                    artists = r.json().get("data", {}).get("results", [])
+                    results = [_normalize_saavn_artist(art) for art in artists]
         except Exception as e:
             print(f"[music] JioSaavn search error: {e}")
-        return jsonify({"results": [], "source": "saavn"}), 200
 
-    # --- Fallback Mode (If source not explicitly saavn or youtube) ---
+    # Write cache
     try:
-        r = requests.get(f"{SAAVN_BASE}/search/songs", params={
-            "query": query,
-            "limit": limit,
-            "page": 1,
-        }, timeout=10)
-
-        if r.ok:
-            data = r.json()
-            songs = (data.get("data") or {}).get("results", [])
-            if songs:
-                tracks = [_normalize_saavn_song(s) for s in songs]
-                return jsonify({"results": tracks, "source": "saavn"}), 200
+        db.search_cache.update_one(
+            {"key": cache_key},
+            {
+                "$set": {
+                    "key": cache_key,
+                    "results": results,
+                    "source": actual_source,
+                    "createdAt": datetime.now(timezone.utc)
+                }
+            },
+            upsert=True
+        )
     except Exception as e:
-        print(f"[music] JioSaavn search error: {e}")
+        print(f"[music] Cache write error: {e}")
 
-    print(f"[music] JioSaavn fallback activated for '{query}'")
-    yt_results = _yt_search_fallback(query, limit)
     return jsonify({
-        "results": yt_results,
-        "source": "youtube" if yt_results else "none",
-        "note": "JioSaavn had no results; showing YouTube results.",
+        "results": results,
+        "source": actual_source,
+        "cached": False
     }), 200
+
 
 
 @bp.route("/stream", methods=["GET"])
