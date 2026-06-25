@@ -505,7 +505,10 @@ export function ArtistsPage({
     let isMounted = true
     let pollInterval: any = null
 
-    const mapAnalyticsData = (analData: any): AnalyticsData => {
+    const mapAnalyticsData = (analData: any, quotesList: any[] = []): AnalyticsData => {
+      const finalQuotes = quotesList && quotesList.length > 0 ? quotesList : (analData.topQuotedLyrics || []).map((q: any) => {
+        return typeof q === 'object' ? q : { quote: q, song: "Unknown Track" };
+      });
       return {
         artistEssence: {
           primaryEmotion: analData.dna?.topThemes?.[0] || "romantic",
@@ -515,23 +518,21 @@ export function ArtistsPage({
         lyricalDNA: analData.dna?.emotionProfile || {
           euphoric: 10, hopeful: 10, nostalgic: 10, melancholy: 10, dark: 10, angry: 10, defiant: 10, romantic: 30
         },
-        mostQuotedLyrics: (analData.topQuotedLyrics || []).map((quoteStr: string, index: number) => {
-          const songs = ["Yellow", "Fix You", "The Scientist", "Viva La Vida"];
+        mostQuotedLyrics: finalQuotes.map((item: any, index: number) => {
           return {
-            quote: quoteStr,
-            song: songs[index % songs.length],
+            quote: item.quote,
+            song: item.song || "Unknown Track",
             saveCount: 15000 - index * 2000,
             shareCount: 450 - index * 50
           };
         }),
-        lyricsWall: (analData.topQuotedLyrics || []).map((quoteStr: string, index: number) => {
-          const songs = ["Yellow", "Fix You", "The Scientist", "Viva La Vida"];
+        lyricsWall: finalQuotes.map((item: any, index: number) => {
           const albums = ["Parachutes", "X&Y", "A Rush of Blood to the Head", "Viva la Vida"];
           const emotions = ["romantic", "melancholy", "nostalgic", "euphoric"];
           return {
-            quote: quoteStr,
-            song: songs[index % songs.length],
-            album: albums[index % albums.length],
+            quote: item.quote,
+            song: item.song || "Unknown Track",
+            album: item.album || albums[index % albums.length],
             emotion: emotions[index % emotions.length],
             saveCount: 8200 - index * 1500
           };
@@ -587,6 +588,44 @@ export function ArtistsPage({
           console.error("Failed fetching artist songs:", e)
         }
 
+        // Load albums
+        let artistAlbums: any[] = []
+        let artistSingles: any[] = []
+        try {
+          const resAlbums = await fetch(`/api/artists/${activeArtistId}/albums`)
+          if (resAlbums.ok) {
+            const albData = await resAlbums.json()
+            artistAlbums = (albData.albums || []).map((a: any) => ({
+              id: a.albumId || a.id,
+              title: a.title,
+              year: a.year,
+              cover: a.coverUrl || a.cover || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300",
+              type: a.type || "album"
+            }))
+            artistSingles = (albData.singles || []).map((s: any) => ({
+              id: s.albumId || s.id,
+              title: s.title,
+              year: s.year,
+              cover: s.coverUrl || s.cover || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300",
+              type: s.type || "single"
+            }))
+          }
+        } catch (e) {
+          console.error("Failed fetching artist albums:", e)
+        }
+
+        // Load lyrics snippets
+        let artistQuotes: any[] = []
+        try {
+          const resQuotes = await fetch(`/api/artists/${activeArtistId}/lyrics-snippets`)
+          if (resQuotes.ok) {
+            const quotesData = await resQuotes.json()
+            artistQuotes = quotesData.quotes || []
+          }
+        } catch (e) {
+          console.error("Failed fetching lyrics snippets:", e)
+        }
+
         const mapped: ArtistData = {
           id: data.artistId,
           name: data.name,
@@ -595,12 +634,12 @@ export function ArtistsPage({
           banner: data.banner || data.imageUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300",
           followers: "Verified",
           monthlyListeners: "Explore",
-          songsCount: (data.albums || []).length * 10 || artistSongs.length || 15,
+          songsCount: (artistAlbums.length + artistSingles.length) || artistSongs.length || 15,
           trendingPercentage: "+10%",
           bio: data.bio,
           popularTracks: artistSongs,
-          albums: data.albums || [],
-          singles: data.singles || [],
+          albums: artistAlbums,
+          singles: artistSingles,
           mostQuotedLyrics: [],
           lyricalDNA: [],
           timeline: [],
@@ -614,7 +653,7 @@ export function ArtistsPage({
         const resAnalytics = await fetch(`/api/artists/${activeArtistId}/analytics`)
         if (resAnalytics.ok) {
           const analData = await resAnalytics.json()
-          setAnalytics(mapAnalyticsData(analData))
+          setAnalytics(mapAnalyticsData(analData, artistQuotes))
         }
 
         // If status is aggregating, poll until completed
@@ -649,6 +688,32 @@ export function ArtistsPage({
                   } catch (e) { }
                 }
 
+                // Try fetching albums again if empty
+                let polledAlbums = artistAlbums
+                let polledSingles = artistSingles
+                if (polledAlbums.length === 0 && polledSingles.length === 0) {
+                  try {
+                    const resAlbums = await fetch(`/api/artists/${activeArtistId}/albums`)
+                    if (resAlbums.ok) {
+                      const albData = await resAlbums.json()
+                      polledAlbums = (albData.albums || []).map((a: any) => ({
+                        id: a.albumId || a.id,
+                        title: a.title,
+                        year: a.year,
+                        cover: a.coverUrl || a.cover || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300",
+                        type: a.type || "album"
+                      }))
+                      polledSingles = (albData.singles || []).map((s: any) => ({
+                        id: s.albumId || s.id,
+                        title: s.title,
+                        year: s.year,
+                        cover: s.coverUrl || s.cover || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300",
+                        type: s.type || "single"
+                      }))
+                    }
+                  } catch (e) {}
+                }
+
                 const polledMapped: ArtistData = {
                   id: pollData.artistId,
                   name: pollData.name,
@@ -657,12 +722,12 @@ export function ArtistsPage({
                   banner: pollData.banner || pollData.imageUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300",
                   followers: "Verified",
                   monthlyListeners: "Explore",
-                  songsCount: (pollData.albums || []).length * 10 || polledSongs.length || 15,
+                  songsCount: (polledAlbums.length + polledSingles.length) || polledSongs.length || 15,
                   trendingPercentage: "+10%",
                   bio: pollData.bio,
                   popularTracks: polledSongs,
-                  albums: pollData.albums || [],
-                  singles: pollData.singles || [],
+                  albums: polledAlbums,
+                  singles: polledSingles,
                   mostQuotedLyrics: [],
                   lyricalDNA: [],
                   timeline: [],
@@ -677,7 +742,17 @@ export function ArtistsPage({
                   const finalRes = await fetch(`/api/artists/${activeArtistId}/analytics`)
                   if (finalRes.ok) {
                     const finalAnalData = await finalRes.json()
-                    setAnalytics(mapAnalyticsData(finalAnalData))
+                    let finalQuotes = artistQuotes
+                    if (finalQuotes.length === 0) {
+                      try {
+                        const resQuotes = await fetch(`/api/artists/${activeArtistId}/lyrics-snippets`)
+                        if (resQuotes.ok) {
+                          const quotesData = await resQuotes.json()
+                          finalQuotes = quotesData.quotes || []
+                        }
+                      } catch (e) {}
+                    }
+                    setAnalytics(mapAnalyticsData(finalAnalData, finalQuotes))
                   }
                 }
               }
@@ -817,14 +892,14 @@ export function ArtistsPage({
         {/* 1. Artist Header Banner */}
         <div className="relative rounded-[24px] overflow-hidden mb-8" style={{ height: 380, border: '1px solid rgba(255,255,255,0.05)', boxShadow: 'inset 0 0 100px rgba(0,0,0,0.8)' }}>
           <div className="absolute inset-0">
-            <img src={artist.banner} alt={artist.name} className="w-full h-full object-cover opacity-30 blur-sm scale-105" />
+            <img src={artist.banner} alt={artist.name} className="w-full h-full object-cover opacity-30 blur-sm scale-105" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
           </div>
           <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #0f0f10 0%, rgba(15,15,16,0.4) 60%, rgba(0,0,0,0) 100%)' }} />
 
           <div className="absolute bottom-0 left-0 right-0 p-8 flex flex-col md:flex-row md:items-end justify-between gap-6 z-10">
             <div className="flex items-end gap-6">
               <div className="rounded-[20px] overflow-hidden border-2 border-[#C6FF33] shadow-2xl flex-shrink-0" style={{ width: 140, height: 140 }}>
-                <img src={artist.cover} alt={artist.name} className="w-full h-full object-cover" />
+                <img src={artist.cover} alt={artist.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
               </div>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
@@ -1079,7 +1154,7 @@ export function ArtistsPage({
                           {numStr}
                         </span>
                         <div className="rounded-[8px] overflow-hidden flex-shrink-0" style={{ width: 40, height: 40, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                          <img src={track.cover} alt="" className="w-full h-full object-cover" />
+                          <img src={track.cover} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
                         </div>
                         <div className="flex flex-col min-w-0 flex-1">
                           <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 14, color: isCurrentPlaying ? '#C6FF33' : 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1131,7 +1206,7 @@ export function ArtistsPage({
                       onClick={() => onNavigate('albums', null, alb.id)}
                       className="p-3 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/5 transition-all text-left cursor-pointer"
                     >
-                      <img src={alb.cover} alt={alb.title} className="w-full aspect-square rounded-lg object-cover mb-2" />
+                      <img src={alb.cover} alt={alb.title} className="w-full aspect-square rounded-lg object-cover mb-2" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
                       <span className="text-white text-xs font-bold truncate block">{alb.title}</span>
                       <span className="text-stone-500 text-[10px]">{alb.year}</span>
                     </div>
@@ -1151,7 +1226,7 @@ export function ArtistsPage({
                       key={sin.id}
                       className="p-3 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/5 transition-all text-left cursor-pointer"
                     >
-                      <img src={sin.cover} alt={sin.title} className="w-full aspect-square rounded-lg object-cover mb-2" />
+                      <img src={sin.cover} alt={sin.title} className="w-full aspect-square rounded-lg object-cover mb-2" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
                       <span className="text-white text-xs font-bold truncate block">{sin.title}</span>
                       <span className="text-stone-500 text-[10px]">{sin.year}</span>
                     </div>
@@ -1222,7 +1297,7 @@ export function ArtistsPage({
           <div className="relative rounded-[24px] overflow-hidden mb-8 border border-white/5 shadow-2xl" style={{ height: 320 }}>
             {/* Spotlight background */}
             <div className="absolute inset-0">
-              <img src={spotlightArtist.banner || spotlightArtist.cover} alt="" className="w-full h-full object-cover opacity-20 blur-[2px] scale-105" />
+              <img src={spotlightArtist.banner || spotlightArtist.cover} alt="" className="w-full h-full object-cover opacity-20 blur-[2px] scale-105" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
               <div className="absolute inset-0 bg-gradient-to-r from-stone-950 via-stone-950/80 to-transparent" />
               <div className="absolute inset-0 bg-gradient-to-t from-stone-950 to-transparent" />
             </div>
@@ -1387,7 +1462,7 @@ export function ArtistsPage({
                     className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-all cursor-pointer flex flex-col gap-2 group relative animate-fade-in"
                   >
                     <div className="w-full aspect-square rounded-lg overflow-hidden">
-                      <img src={art.cover} alt={art.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <img src={art.cover} alt={art.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className="text-white text-xs font-bold truncate group-hover:text-[#C6FF33] transition-colors">{art.name}</span>
@@ -1419,7 +1494,7 @@ export function ArtistsPage({
                       {isFirst ? (
                         <>
                           <div className="absolute inset-0 opacity-20">
-                            <img src={art.banner || art.cover} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="" />
+                            <img src={art.banner || art.cover} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
                           </div>
                           <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/80 to-transparent" />
                           <div className="relative z-10 flex flex-col justify-end h-full mt-auto pt-8">
@@ -1434,7 +1509,7 @@ export function ArtistsPage({
                       ) : (
                         <>
                           <div className="w-full aspect-square rounded-lg overflow-hidden">
-                            <img src={art.cover} alt={art.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={art.cover} alt={art.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300' }} />
                           </div>
                           <div className="flex flex-col min-w-0">
                             <span className="text-white text-xs font-bold truncate group-hover:text-[#C6FF33] transition-colors">{art.name}</span>

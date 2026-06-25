@@ -1,5 +1,8 @@
 # routes/artist_routes.py
 import random
+import os
+import requests
+import time
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from datetime import datetime, timezone, timedelta
@@ -7,6 +10,67 @@ from models.artist import ArtistModel
 from utils.artist_aggregator import seed_database, trigger_background_refresh, SEED_ARTISTS_METADATA, EMOTION_KEYWORDS
 
 artist_bp = Blueprint("artist", __name__)
+
+def format_duration(secs):
+    if not secs: return "0:00"
+    return f"{int(secs)//60}:{int(secs)%60:02d}"
+
+def is_placeholder_image(url):
+    if not url:
+        return True
+    url_str = str(url).lower()
+    if "unsplash" in url_str or "placeholder" in url_str:
+        return True
+    return False
+
+def get_jiosaavn_artist_info(artist_id, artist_name):
+    db = ArtistModel.get_db()
+    artist = db.artists.find_one({"artistId": artist_id})
+    if artist:
+        saavn_id = artist.get("saavn_artist_id")
+        saavn_image = artist.get("saavn_image")
+        cached_at = artist.get("saavn_cached_at")
+        if saavn_id and cached_at:
+            if isinstance(cached_at, str):
+                try:
+                    cached_at = datetime.fromisoformat(cached_at)
+                except ValueError:
+                    cached_at = None
+            if cached_at:
+                age = datetime.utcnow() - cached_at
+                if age.total_seconds() < 24 * 3600:
+                    return saavn_id, saavn_image
+
+    # Fetch from JioSaavn API
+    try:
+        r = requests.get(
+            "https://saavn.dev/api/search/artists",
+            params={"query": artist_name, "limit": 1},
+            timeout=3
+        )
+        if r.status_code == 200:
+            data = r.json()
+            results = data.get("data", {}).get("results", [])
+            if results:
+                saavn_id = results[0].get("id")
+                images = results[0].get("image", [])
+                saavn_image = images[-1].get("url") if images else None
+                if saavn_id:
+                    db.artists.update_one(
+                        {"artistId": artist_id},
+                        {"$set": {
+                            "saavn_artist_id": saavn_id,
+                            "saavn_image": saavn_image,
+                            "saavn_cached_at": datetime.utcnow()
+                        }}
+                    )
+                    return saavn_id, saavn_image
+    except Exception as e:
+        print(f"Error fetching JioSaavn info for {artist_name}: {e}")
+    
+    if artist:
+        return artist.get("saavn_artist_id"), artist.get("saavn_image")
+    return None, None
 
 # Adjacency transitions for emotion journey BFS
 EMOTION_TRANSITIONS = {
@@ -108,7 +172,9 @@ def get_artist_profile(artist_id):
         trigger_background_refresh(artist_id)
         artist = db.artists.find_one({"artistId": artist_id})
         if not artist:
-            return jsonify({"error": "Artist not found. Enqueued for background aggregation."}), 404
+            return jsonify({"error": "Artist not found"}), 404
+
+    artist_name = artist.get("name", artist_id)
 
     # Cache expiration check (7 days)
     last_updated = artist.get("lastAggregated")
@@ -117,11 +183,67 @@ def get_artist_profile(artist_id):
             now = datetime.now(timezone.utc)
         else:
             now = datetime.utcnow()
-        
         if (now - last_updated) > timedelta(days=7):
             trigger_background_refresh(artist_id)
 
-    # Clean object ID for JSON serialization
+    # 1. Last.fm Bio Caching (TTL: 7 days)
+    bio_cached_at = artist.get("bio_cached_at")
+    need_bio_refresh = True
+    if bio_cached_at:
+        if isinstance(bio_cached_at, str):
+            try:
+                bio_cached_at = datetime.fromisoformat(bio_cached_at)
+            except ValueError:
+                bio_cached_at = None
+        if bio_cached_at and (datetime.utcnow() - bio_cached_at).total_seconds() < 7 * 24 * 3600:
+            need_bio_refresh = False
+
+    if need_bio_refresh:
+        api_key = os.getenv("LASTFM_API_KEY", "b25b9595548c7e052445b23d91b48d2c")
+        try:
+            lfm_r = requests.get(
+                "http://ws.audioscrobbler.com/2.0/",
+                params={
+                    "method": "artist.getinfo",
+                    "artist": artist_name,
+                    "api_key": api_key,
+                    "format": "json"
+                },
+                timeout=4
+            )
+            if lfm_r.status_code == 200:
+                lfm_data = lfm_r.json()
+                lfm_artist = lfm_data.get("artist", {})
+                bio_summary = lfm_artist.get("bio", {}).get("summary", "")
+                if "<a href" in bio_summary:
+                    bio_summary = bio_summary.split("<a href")[0].strip()
+                
+                tags = [t.get("name") for t in lfm_artist.get("tags", {}).get("tag", []) if t.get("name")]
+                
+                update_fields = {"bio_cached_at": datetime.utcnow()}
+                if bio_summary:
+                    update_fields["bio"] = bio_summary
+                    artist["bio"] = bio_summary
+                if tags:
+                    update_fields["genres"] = tags
+                    artist["genres"] = tags
+                
+                db.artists.update_one({"artistId": artist_id}, {"$set": update_fields})
+        except Exception as e:
+            print(f"Error fetching Last.fm bio for {artist_name}: {e}")
+
+    # 2. JioSaavn Image Fallback
+    image_url = artist.get("imageUrl", artist.get("cover"))
+    if is_placeholder_image(image_url):
+        _, saavn_img = get_jiosaavn_artist_info(artist_id, artist_name)
+        if saavn_img:
+            db.artists.update_one(
+                {"artistId": artist_id},
+                {"$set": {"imageUrl": saavn_img, "cover": saavn_img}}
+            )
+            artist["imageUrl"] = saavn_img
+            artist["cover"] = saavn_img
+
     artist["_id"] = str(artist["_id"])
     return jsonify(artist), 200
 
@@ -149,10 +271,63 @@ def get_artist_songs(artist_id):
     """
     seed_database()
     db = ArtistModel.get_db()
-    songs = list(db.songs.find({"artistId": artist_id}))
-    for s in songs:
-        s["_id"] = str(s["_id"])
-    return jsonify({"songs": songs}), 200
+    
+    artist = db.artists.find_one({"artistId": artist_id})
+    if not artist:
+        return jsonify({"error": "Artist not found"}), 404
+    artist_name = artist["name"]
+
+    # Read saavn_artist_id from DB/fetch
+    saavn_id, saavn_img = get_jiosaavn_artist_info(artist_id, artist_name)
+    if not saavn_id:
+        # Fallback to local DB songs if JioSaavn info is not found
+        songs = list(db.songs.find({"artistId": artist_id}))
+        for s in songs:
+            s["_id"] = str(s["_id"])
+        return jsonify({"songs": songs}), 200
+
+    try:
+        # Fetch artist songs from saavn.dev
+        r = requests.get(
+            f"https://saavn.dev/api/artists/{saavn_id}/songs",
+            params={"page": 0, "songCount": 20},
+            timeout=4
+        )
+        if r.status_code != 200:
+            return jsonify({"songs": [], "error": "Stream source unavailable"}), 200
+            
+        data = r.json()
+        songs_data = data.get("data", {}).get("songs", [])
+        
+        songs = []
+        for s in songs_data:
+            duration_secs = s.get("duration")
+            duration_str = format_duration(duration_secs)
+            
+            # Map quality images
+            images = s.get("image", [])
+            img_url = images[-1].get("url") if images else (saavn_img or "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300")
+            
+            # Audio URL
+            download_urls = s.get("downloadUrl", [])
+            audio_url = download_urls[-1].get("url") if download_urls else ""
+            
+            songs.append({
+                "songId": s.get("id"),
+                "title": s.get("name"),
+                "artistId": artist_id,
+                "album": s.get("album", {}).get("name", "Single"),
+                "duration": duration_str,
+                "imageUrl": img_url,
+                "previewUrl": audio_url,
+                "audioUrl": audio_url
+            })
+            
+        return jsonify({"songs": songs}), 200
+
+    except requests.RequestException as e:
+        print(f"Error calling saavn.dev for songs of {artist_name}: {e}")
+        return jsonify({"songs": [], "error": "Stream source unavailable"}), 200
 
 
 @artist_bp.route("/<artist_id>/albums", methods=["GET"])
@@ -162,10 +337,264 @@ def get_artist_albums(artist_id):
     """
     seed_database()
     db = ArtistModel.get_db()
-    albums = list(db.albums.find({"artistId": artist_id}))
-    for a in albums:
-        a["_id"] = str(a["_id"])
-    return jsonify({"albums": albums}), 200
+    
+    artist = db.artists.find_one({"artistId": artist_id})
+    if not artist:
+        return jsonify({"error": "Artist not found"}), 404
+    artist_name = artist["name"]
+
+    # Cache TTL for MusicBrainz discography (7 days)
+    mb_cached_at = artist.get("mb_cached_at")
+    need_mb_refresh = True
+    if mb_cached_at:
+        if isinstance(mb_cached_at, str):
+            try:
+                mb_cached_at = datetime.fromisoformat(mb_cached_at)
+            except ValueError:
+                mb_cached_at = None
+        if mb_cached_at and (datetime.utcnow() - mb_cached_at).total_seconds() < 7 * 24 * 3600:
+            need_mb_refresh = False
+
+    if not need_mb_refresh:
+        # Load from db.albums
+        db_albums = list(db.albums.find({"artistId": artist_id}))
+        if db_albums:
+            albums = []
+            singles = []
+            for a in db_albums:
+                a["_id"] = str(a["_id"])
+                item = {
+                    "albumId": a.get("albumId"),
+                    "title": a.get("title"),
+                    "year": a.get("year", 2020),
+                    "type": a.get("type", "album"),
+                    "coverUrl": a.get("coverUrl") or "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300"
+                }
+                if a.get("type") == "single":
+                    singles.append(item)
+                else:
+                    albums.append(item)
+            return jsonify({"albums": albums, "singles": singles}), 200
+
+    # Otherwise fetch from MusicBrainz and Cover Art Archive
+    headers = {"User-Agent": "LyricaMusicLyrics/1.0 (contact: demo@lyrica.com)"}
+    try:
+        # Step 1: Search MusicBrainz for artist MBID
+        # Rate limit compliance: sleep 1s
+        time.sleep(1)
+        mb_artist_r = requests.get(
+            "https://musicbrainz.org/ws/2/artist",
+            params={"query": f"artist:{artist_name}", "fmt": "json"},
+            headers=headers,
+            timeout=5
+        ).json()
+        
+        artists_list = mb_artist_r.get("artists", [])
+        if not artists_list:
+            return jsonify({"albums": [], "singles": []}), 200
+            
+        mbid = artists_list[0]["id"]
+        
+        # Step 2: Fetch release groups
+        # Rate limit compliance: sleep 1s
+        time.sleep(1)
+        rg_url = f"https://musicbrainz.org/ws/2/release-group?artist={mbid}&fmt=json"
+        rg_r = requests.get(rg_url, headers=headers, timeout=5).json()
+        release_groups = rg_r.get("release-groups", [])
+        
+        albums = []
+        singles = []
+        
+        albums_rg = [rg for rg in release_groups if (rg.get("primary-type") or "").lower() == "album"][:10]
+        singles_rg = [rg for rg in release_groups if (rg.get("primary-type") or "").lower() in ("single", "ep")][:10]
+        
+        def get_cover_art(rg_id):
+            try:
+                caa_r = requests.get(f"https://coverartarchive.org/release-group/{rg_id}", timeout=2)
+                if caa_r.status_code == 200:
+                    images = caa_r.json().get("images", [])
+                    if images:
+                        return images[0].get("image")
+            except Exception:
+                pass
+            return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300"
+            
+        # Delete existing cached albums for this artist before replacing
+        db.albums.delete_many({"artistId": artist_id})
+        
+        for rg in albums_rg:
+            rg_id = rg.get("id")
+            date_str = rg.get("first-release-date", "")
+            year = int(date_str.split("-")[0]) if date_str else 2020
+            cover = get_cover_art(rg_id)
+            album_item = {
+                "albumId": rg_id,
+                "title": rg.get("title"),
+                "year": year,
+                "type": "album",
+                "coverUrl": cover
+            }
+            albums.append(album_item)
+            
+            # Save to db
+            db.albums.insert_one({
+                "artistId": artist_id,
+                "albumId": rg_id,
+                "title": rg.get("title"),
+                "year": year,
+                "type": "album",
+                "coverUrl": cover
+            })
+            
+        for rg in singles_rg:
+            rg_id = rg.get("id")
+            date_str = rg.get("first-release-date", "")
+            year = int(date_str.split("-")[0]) if date_str else 2020
+            cover = get_cover_art(rg_id)
+            single_item = {
+                "albumId": rg_id,
+                "title": rg.get("title"),
+                "year": year,
+                "type": "single",
+                "coverUrl": cover
+            }
+            singles.append(single_item)
+            
+            # Save to db
+            db.albums.insert_one({
+                "artistId": artist_id,
+                "albumId": rg_id,
+                "title": rg.get("title"),
+                "year": year,
+                "type": "single",
+                "coverUrl": cover
+            })
+            
+        # Update mb_cached_at on the artist document
+        db.artists.update_one(
+            {"artistId": artist_id},
+            {"$set": {"mb_cached_at": datetime.utcnow()}}
+        )
+        
+        return jsonify({"albums": albums, "singles": singles}), 200
+        
+    except Exception as e:
+        print(f"Error fetching MusicBrainz albums for {artist_name}: {e}")
+        # Return whatever we have in the DB as fallback
+        db_albums = list(db.albums.find({"artistId": artist_id}))
+        albums = []
+        singles = []
+        for a in db_albums:
+            a["_id"] = str(a["_id"])
+            item = {
+                "albumId": a.get("albumId"),
+                "title": a.get("title"),
+                "year": a.get("year", 2020),
+                "type": a.get("type", "album"),
+                "coverUrl": a.get("coverUrl") or "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300"
+            }
+            if a.get("type") == "single":
+                singles.append(item)
+            else:
+                albums.append(item)
+        return jsonify({"albums": albums, "singles": singles}), 200
+
+
+@artist_bp.route("/<artist_id>/lyrics-snippets", methods=["GET"])
+def get_lyrics_snippets(artist_id):
+    """
+    Get lyric snippets/quotes for an artist.
+    """
+    seed_database()
+    db = ArtistModel.get_db()
+    
+    artist = db.artists.find_one({"artistId": artist_id})
+    if not artist:
+        return jsonify({"error": "Artist not found"}), 404
+    artist_name = artist["name"]
+    
+    # Check if we already have lyrics in db.lyrics for this artist first
+    db_lyrics = list(db.lyrics.find({"artistId": artist_id}))
+    quotes = []
+    if db_lyrics:
+        for lyr in db_lyrics:
+            song_doc = db.songs.find_one({"songId": lyr.get("songId")})
+            song_title = song_doc.get("title") if song_doc else "Unknown Song"
+            lines = lyr.get("quotableLines") or []
+            if not lines and lyr.get("plainText"):
+                lines = [line.strip() for line in lyr.get("plainText").split("\n") if len(line.strip()) > 15][:3]
+            for line in lines:
+                quotes.append({
+                    "quote": line,
+                    "song": song_title
+                })
+        if len(quotes) >= 3:
+            return jsonify({"quotes": quotes[:6]}), 200
+
+    # Otherwise fetch dynamically using JioSaavn + LRCLib/lyrics.ovh
+    saavn_id, saavn_img = get_jiosaavn_artist_info(artist_id, artist_name)
+    if not saavn_id:
+        return jsonify({"quotes": []}), 200
+        
+    try:
+        r = requests.get(
+            f"https://saavn.dev/api/artists/{saavn_id}/songs",
+            params={"page": 0, "songCount": 10},
+            timeout=3
+        )
+        if r.status_code != 200:
+            return jsonify({"quotes": []}), 200
+            
+        data = r.json()
+        songs_data = data.get("data", {}).get("songs", [])
+        
+        quotes = []
+        for song in songs_data[:6]:
+            track_name = song.get("name")
+            
+            # 1. LRCLib API check
+            try:
+                lrc_r = requests.get(
+                    "https://lrclib.net/api/get",
+                    params={"artist_name": artist_name, "track_name": track_name},
+                    timeout=2
+                )
+                if lrc_r.status_code == 200:
+                    plain_lyrics = lrc_r.json().get("plainLyrics") or ""
+                    if plain_lyrics:
+                        lines = [line.strip() for line in plain_lyrics.split("\n") if len(line.strip()) > 15]
+                        selected_lines = lines[2:5]
+                        for line in selected_lines:
+                            quotes.append({
+                                "quote": line,
+                                "song": track_name
+                            })
+                        continue # Skip to next song
+            except Exception:
+                pass
+                
+            # 2. lyrics.ovh fallback API check
+            try:
+                ovh_url = f"https://api.lyrics.ovh/v1/{artist_name}/{track_name}"
+                ovh_r = requests.get(ovh_url, timeout=2)
+                if ovh_r.status_code == 200:
+                    lyrics_text = ovh_r.json().get("lyrics") or ""
+                    if lyrics_text:
+                        lines = [line.strip() for line in lyrics_text.split("\n") if len(line.strip()) > 15]
+                        selected_lines = lines[2:5] if len(lines) >= 5 else lines[:3]
+                        for line in selected_lines:
+                            quotes.append({
+                                "quote": line,
+                                "song": track_name
+                            })
+            except Exception:
+                pass
+                
+        return jsonify({"quotes": quotes[:6]}), 200
+        
+    except Exception as e:
+        print(f"Error fetching lyric snippets for {artist_name}: {e}")
+        return jsonify({"quotes": []}), 200
 
 
 @artist_bp.route("/<artist_id>/graph/neighbors", methods=["GET"])
@@ -266,6 +695,32 @@ def get_discovery_hub():
         # Pad with other global artists if still under 8
         if len(popular_in_india) < 8:
             popular_in_india.extend(all_artists[:8 - len(popular_in_india)])
+
+    # Helper to check placeholder
+    def is_placeholder(url):
+        if not url: return True
+        url_str = str(url).lower()
+        if "unsplash" in url_str or "placeholder" in url_str:
+            return True
+        return False
+
+    # Enrich trending if they have a placeholder imageUrl
+    for a in trending:
+        img_url = a.get("imageUrl", "")
+        if is_placeholder(img_url):
+            _, saavn_img = get_jiosaavn_artist_info(a["artistId"], a["name"])
+            if saavn_img:
+                a["imageUrl"] = saavn_img
+                a["cover"] = saavn_img
+                db.artists.update_one({"artistId": a["artistId"]}, {"$set": {"imageUrl": saavn_img, "cover": saavn_img}})
+
+    # Enrich ALL popular_in_india artists regardless of placeholder check
+    for a in popular_in_india:
+        _, saavn_img = get_jiosaavn_artist_info(a["artistId"], a["name"])
+        if saavn_img:
+            a["imageUrl"] = saavn_img
+            a["cover"] = saavn_img
+            db.artists.update_one({"artistId": a["artistId"]}, {"$set": {"imageUrl": saavn_img, "cover": saavn_img}})
 
     # Group into moods using lyrics tags or default tags
     moods_categories = {emo: [] for emo in EMOTION_TRANSITIONS.keys()}
