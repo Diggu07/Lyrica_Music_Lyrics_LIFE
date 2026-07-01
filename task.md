@@ -1,1005 +1,596 @@
-You are improving the existing Lyrica HomePage, NOT rebuilding it.
+# Lyrica - Backend Refactoring & Production Roadmap
 
-Keep the existing architecture, styling system, typography, colors, components, and code quality wherever possible.
+> **Project Goal**
+>
+> Transform Lyrica from a prototype into a scalable, production-ready music streaming platform using **React + Flask + MongoDB** with a **provider abstraction architecture**.
 
-The current page already has:
+---
 
-- Editorial Hero
-- Global Charts
-- Regional Charts
-- Mood Collections
-- Recently Played
-- Trending Artists
-- Fresh Releases
-- Genres
-- For You
-- Editors Picks
-- Trending Playlists
-- Live Events
-- Music Videos
-- Lyrics Spotlight
-- Continue Exploring
+# Overall Progress
 
-The page is visually good but still feels too static, repetitive, and desktop space isn't being utilized efficiently.
+* [x] UI Design
+* [x] Frontend Components
+* [x] Initial Flask Backend
+* [ ] Production Backend Architecture
+* [ ] Provider Abstraction Layer
+* [ ] Canonical Data Models
+* [ ] MongoDB Cache
+* [ ] Real Metadata Integration
+* [ ] Real Playback Integration
+* [ ] Frontend API Integration
 
-I want the homepage to feel like a premium editorial magazine rather than a dashboard.
+---
 
-=========================================================
-GENERAL GOALS
-=========================================================
+# Phase 1 — Project Cleanup (Highest Priority)
 
-Increase information density by approximately 25%.
+## 1. Clean Backend Structure
 
-Reduce repetitive layouts.
+### Current Problems
 
-Reduce unnecessary whitespace.
+* Provider logic mixed inside routes
+* Business logic inside controllers
+* No service layer
+* No provider abstraction
+* Difficult to scale
 
-Increase discovery.
+### Tasks
 
-Make every scroll reveal something visually different.
+* [ ] Remove provider/API calls from routes
+* [ ] Reduce app.py responsibilities
+* [ ] Move initialization into dedicated modules
+* [ ] Organize backend into production architecture
 
-The homepage should feel alive.
+---
 
-Do NOT clutter.
+## 2. Create Production Folder Structure
 
-Do NOT increase complexity for the user.
+Target structure
 
-Everything should remain elegant.
+```text
+backend/
 
-=========================================================
-1. HERO IMPROVEMENTS
-=========================================================
+app/
 
-Keep the existing Hero.
+├── api/
+├── providers/
+├── services/
+├── normalizers/
+├── cache/
+├── repositories/
+├── models/
+├── schemas/
+├── middleware/
+├── utils/
+├── config/
+├── extensions.py
+└── __init__.py
+```
 
-Improve it by adding:
+Tasks
 
-• animated waveform
-• live popularity rank
-• total streams
-• weekly growth
-• monthly listeners
-• listening countries
-• friends listening
-• subtle background animation
-• animated glow behind artwork
-• rotating gradient
-• artist avatars
-• richer metadata
+* [ ] Create providers package
+* [ ] Create services package
+* [ ] Create normalizers package
+* [ ] Create repositories package
+* [ ] Create cache package
+* [ ] Create schemas package
 
-Replace
+---
 
-Release Date
+# Phase 2 — Database Design
 
-with
+## MongoDB Collections
 
-#2 Worldwide
+### User Collections
 
-18.6M Plays
+* [ ] users
+* [ ] playlists
+* [ ] playlistSongs
+* [ ] library
+* [ ] likes
+* [ ] listeningHistory
+* [ ] searchHistory
+* [ ] recommendationCache
+* [ ] editorialCollections
 
-+12% this week
+---
 
-instead.
+### Cache Collections
 
-The right-side statistics panel should feel like Spotify Wrapped.
+* [ ] cachedSongs
+* [ ] cachedArtists
+* [ ] cachedAlbums
+* [ ] cachedLyrics
+* [ ] cachedCharts
+* [ ] providerMappings
 
-Hero companions should contain
+---
 
-Artist
+### Analytics Collections
 
-Album
+* [ ] songStatistics
+* [ ] artistStatistics
+* [ ] searchAnalytics
 
-Playlist
+---
 
-instead of only tracks.
+## Database Tasks
 
-=========================================================
-2. HOMEPAGE ORDER
-=========================================================
+* [ ] Design complete schema
+* [ ] Create indexes
+* [ ] Design relationships
+* [ ] TTL indexes for cached collections
+* [ ] User collection validation
 
-Rearrange the homepage.
+---
 
-Recommended order:
+# Phase 3 — Canonical Models
 
-Hero
+Create internal models independent of providers.
 
-Continue Listening
+## Song
 
-Global Charts
+* [ ] Canonical Song model
 
-Regional Charts
+## Artist
 
-For You
+* [ ] Canonical Artist model
 
-Trending Artists
+## Album
 
-Fresh Releases
+* [ ] Canonical Album model
 
-Mood Collections
+## Playlist
 
-Genres
+* [ ] Canonical Playlist model
 
-Editorial Picks
+## Lyrics
 
-Trending Playlists
+* [ ] Canonical Lyrics model
 
-Explore
+## Provider Mapping
 
-Move
+* [ ] Canonical Provider Mapping model
 
-Lyrics
+---
 
-Videos
+# Phase 4 — Provider Layer
 
-Events
+Each provider should communicate with only one external service.
 
-towards the bottom.
+## Spotify Provider
 
-These should not interrupt discovery.
+Responsibilities
 
-=========================================================
-3. REDUCE REPETITION
-=========================================================
+* [ ] Search Songs
+* [ ] Search Artists
+* [ ] Search Albums
+* [ ] Artist Metadata
+* [ ] Album Metadata
+* [ ] Audio Features
+* [ ] Related Artists
 
-Currently almost every section is
+---
 
-Horizontal Carousel
+## MusicBrainz Provider
+
+Responsibilities
+
+* [ ] Recording lookup
+* [ ] Artist metadata
+* [ ] Album metadata
+* [ ] Release information
+
+---
+
+## Last.fm Provider
+
+Responsibilities
+
+* [ ] Artist Tags
+* [ ] Similar Artists
+* [ ] Similar Songs
+* [ ] Popularity enrichment
+
+---
+
+## Cover Art Archive
+
+Responsibilities
+
+* [ ] Album Artwork
+* [ ] Artist Artwork
+
+---
+
+## LRCLIB Provider
+
+Responsibilities
+
+* [ ] Synced Lyrics
+* [ ] Plain Lyrics
+
+---
+
+## YTMusic Provider
+
+Responsibilities
+
+* [ ] Search
+* [ ] Playback URL
+* [ ] Album lookup
+* [ ] Artist lookup
+
+---
+
+## JioSaavn Provider
+
+Responsibilities
+
+* [ ] Search
+* [ ] Playback URL
+* [ ] Album lookup
+* [ ] Artist lookup
+
+---
+
+# Phase 5 — Normalizers
+
+Every provider response should be normalized.
+
+Create
+
+* [ ] Spotify Normalizer
+* [ ] MusicBrainz Normalizer
+* [ ] LastFM Normalizer
+* [ ] YTMusic Normalizer
+* [ ] JioSaavn Normalizer
+* [ ] LRCLIB Normalizer
+
+Output should always become
+
+```text
+Canonical Song
+
+Canonical Artist
+
+Canonical Album
+
+Canonical Lyrics
+```
+
+---
+
+# Phase 6 — Service Layer
+
+Create business logic.
+
+## Search Service
+
+Responsibilities
+
+* [ ] Spotify Search
+* [ ] MusicBrainz Fallback
+* [ ] LastFM enrichment
+* [ ] Merge Results
+* [ ] Deduplicate
+* [ ] Cache
+
+---
+
+## Metadata Service
+
+Responsibilities
+
+* [ ] Song metadata
+* [ ] Artist metadata
+* [ ] Album metadata
+
+---
+
+## Playback Service
+
+Responsibilities
+
+* [ ] Resolve playback
+* [ ] YTMusic first
+* [ ] JioSaavn fallback
+* [ ] Cache stream URLs
+
+---
+
+## Lyrics Service
+
+Responsibilities
+
+* [ ] LRCLIB lookup
+* [ ] Fallback lyrics
+* [ ] Cache lyrics
+
+---
+
+## Recommendation Service
+
+Responsibilities
+
+* [ ] Similar Artists
+* [ ] Similar Songs
+* [ ] Audio Features
+* [ ] User Behaviour
+
+---
+
+## Cache Service
+
+Responsibilities
+
+* [ ] Save cache
+* [ ] Refresh cache
+* [ ] Expire cache
+* [ ] Provider mapping
+
+---
+
+# Phase 7 — Metadata Strategy
+
+Priority
+
+```
+Spotify
 
 ↓
 
-Horizontal Carousel
+MusicBrainz
 
 ↓
 
-Horizontal Carousel
+Last.fm
+```
+
+Collect
+
+* [ ] Song title
+* [ ] Artist
+* [ ] Album
+* [ ] Release date
+* [ ] Genres
+* [ ] Audio Features
+* [ ] Popularity
+* [ ] Artist Images
+* [ ] Album Images
+
+---
+
+# Phase 8 — Playback Strategy
+
+Priority
+
+```
+YTMusic
 
 ↓
 
-Horizontal Carousel
+JioSaavn
+```
 
-This feels repetitive.
+Tasks
 
-Mix layouts.
+* [ ] Playback Resolver
+* [ ] Quality Selection
+* [ ] Expiring URL Handling
+* [ ] Stream Validation
 
-Examples:
+---
 
-carousel
+# Phase 9 — Artwork Strategy
 
-grid
+Priority
 
-magazine
+```
+Cover Art Archive
 
-masonry
-
-featured card
-
-split layout
-
-staggered layout
-
-Pinterest-style blocks
-
-Alternating layouts create a premium experience.
-
-=========================================================
-4. CARD VARIETY
-=========================================================
-
-Do NOT make every card identical.
-
-Introduce
-
-Large landscape cards
-
-Square cards
-
-Portrait cards
-
-Feature cards
-
-Mini cards
-
-Magazine cards
-
-Editorial cards
-
-Mixed height cards
-
-Different border radii
-
-Some sections should contain
-
-2 large cards
-
-6 small cards
-
-instead of
-
-8 identical cards.
-
-=========================================================
-5. BETTER CHARTS
-=========================================================
-
-Global Charts should contain more chart types.
-
-Examples
-
-Worldwide Top 50
-
-Global Pulse
-
-Pop Now
-
-Hip Hop Radar
-
-Rock Circuit
-
-Dance Signal
-
-Electronic
-
-Country
-
-Latin
-
-Afrobeats
-
-K-Pop
-
-J-Pop
-
-Trending Albums
-
-New Releases
-
-Most Saved
-
-Fastest Rising
-
-Regional Charts should include
-
-India
-
-Hindi
-
-Punjabi
-
-Tamil
-
-Telugu
-
-Malayalam
-
-Kannada
-
-Marathi
-
-Gujarati
-
-Bengali
-
-USA
-
-UK
-
-Japan
-
-Korea
-
-France
-
-Germany
-
-Brazil
-
-Canada
-
-Australia
-
-Mexico
-
-Add
-
-Updated Today
-
-Weekly movement
-
-Followers
-
-Track count
-
-Play button
-
-=========================================================
-6. CONTINUE LISTENING
-=========================================================
-
-Move Recently Played near the Hero.
-
-Rename to
-
-Continue Listening
-
-Show
-
-Progress
-
-Remaining duration
-
-Resume button
-
-Last played
-
-Listening percentage
-
-=========================================================
-7. TRENDING ARTISTS
-=========================================================
-
-Improve artist cards.
-
-Show
-
-Monthly listeners
-
-Followers
-
-Trending rank
-
-Top 3 songs
-
-Follow button
-
-Hover animation
-
-Verified badge
-
-=========================================================
-8. FRESH RELEASES
-=========================================================
-
-Use one large featured release
-
-followed by
-
-smaller releases.
-
-Not all identical.
-
-=========================================================
-9. GENRES
-=========================================================
-
-Genre pills should update recommendations instantly.
-
-Animate transitions.
-
-Show
-
-Top artist
-
-Top playlist
-
-Top album
-
-when selected.
-
-=========================================================
-10. FOR YOU
-=========================================================
-
-Make this section feel smarter.
-
-Examples
-
-Because you liked...
-
-Recently obsessed
-
-Hidden gems
-
-Continue artist journey
-
-Rediscover
-
-Deep cuts
-
-=========================================================
-11. EDITORIAL PICKS
-=========================================================
-
-Magazine style.
-
-Large photography.
-
-Beautiful typography.
-
-Not identical cards.
-
-=========================================================
-12. PLAYLISTS
-=========================================================
-
-Use beautiful covers.
-
-Different layouts.
-
-Editorial feeling.
-
-Not simple square artwork.
-
-=========================================================
-13. IMAGES
-=========================================================
-
-Current implementation relies heavily on Unsplash.
-
-Replace generic photography wherever possible with
-
-album art
-
-artist photography
-
-concerts
-
-vinyl textures
-
-abstract music artwork
-
-cinematic gradients
-
-Only use Unsplash as placeholder.
-
-Everything should feel music-centric.
-
-=========================================================
-14. TYPOGRAPHY
-=========================================================
-
-Currently almost every heading uses Instrument Serif.
-
-Reduce repetition.
-
-Use
-
-Hero
-
-Large Serif
-
-Section Titles
-
-Medium Serif
-
-Cards
-
-Sans
-
-Metadata
-
-Small Sans
-
-Statistics
-
-Monospace / condensed
-
-Increase hierarchy.
-
-=========================================================
-15. ANIMATIONS
-=========================================================
-
-Add
-
-fade-in
-
-stagger
-
-hover glow
-
-parallax
-
-album zoom
-
-waveform animation
-
-cursor lighting
-
-micro interactions
-
-Do NOT over animate.
-
-Everything should feel smooth.
-
-=========================================================
-16. HOMEPAGE PERSONALIZATION
-=========================================================
-
-The homepage should adapt.
-
-Examples
-
-Good Evening, <User>
-
-Continue where you left off
-
-Your Top Genre
-
-Your Mood Today
-
-Based on Yesterday
-
-Trending near you
-
-Recently Loved
-
-=========================================================
-17. REMOVE HARDCODED CONTENT
-=========================================================
-
-Do NOT hardcode
-
-statistics
-
-artists
-
-playlists
-
-streams
-
-followers
-
-metadata
-
-All should come from services or mock API structures.
-
-Only placeholder images are acceptable.
-
-=========================================================
-18. COMPONENT ARCHITECTURE
-=========================================================
-
-The current HomePage.tsx is becoming very large.
-
-Split into reusable components.
-
-HeroSection
-
-ContinueListening
-
-ChartsCarousel
-
-RegionalCharts
-
-MoodCollections
-
-TrendingArtists
-
-FreshReleases
-
-Genres
-
-EditorialPicks
-
-Playlists
-
-ExploreGrid
-
-Each section should have its own file.
-
-Move business logic into hooks/services.
-
-=========================================================
-19. PERFORMANCE
-=========================================================
-
-Lazy load sections below the fold.
-
-Virtualize large lists.
-
-Memoize expensive computations.
-
-Prevent unnecessary rerenders.
-
-=========================================================
-20. FINAL RESULT
-=========================================================
-
-The final homepage should feel comparable to
+↓
 
 Spotify
 
-Apple Music
+↓
 
-Tidal
+JioSaavn
 
-Arc Browser
+↓
 
-Pinterest Editorial
+YTMusic
+```
 
-Luxury fashion websites
+Tasks
 
-High information density.
-
-Minimal clutter.
-
-Premium typography.
-
-Editorial storytelling.
-
-Excellent discovery.
-
-Smooth scrolling.
-
-No repetitive layouts.
-
-No large empty spaces.
-
-Maintain Lyrica's luxury aesthetic while making the homepage feel alive, intelligent, dynamic, and production-ready.
-
-# 21. REAL DATA, AUTHENTIC CONTENT & NO PLACEHOLDERS (MANDATORY)
-
-This is the highest priority requirement.
-
-The homepage MUST NOT use hardcoded artists, songs, albums, statistics, playlist names, covers, or repeated placeholder content.
-
-The current implementation reuses the same songs, album covers, and artists across multiple sections. This breaks immersion and makes the application feel like a prototype instead of a production music platform.
-
-Everything displayed on the homepage should be dynamically fetched from APIs, the backend aggregation service, or the local database.
+* [ ] Album Artwork
+* [ ] Artist Artwork
+* [ ] Playlist Artwork
 
 ---
 
-## REAL ALBUM ARTWORK
+# Phase 10 — Lyrics Strategy
 
-Replace every placeholder, Unsplash image, and generic photography with real album artwork.
+Priority
 
-Album covers should come from the music metadata pipeline.
+```
+LRCLIB
 
-Preferred sources:
+↓
 
-* Cover Art Archive
-* MusicBrainz
-* Spotify metadata
-* Apple Music metadata
-* Deezer metadata
-* Last.fm artwork
-* Local cached artwork
+JioSaavn
+```
 
-Artwork should always match the actual song or album being displayed.
+Tasks
 
-Do not reuse the same artwork for unrelated songs.
-
-Fallback only when absolutely necessary.
+* [ ] Synced Lyrics
+* [ ] Plain Lyrics
+* [ ] Time Stamps
 
 ---
 
-## REAL ARTIST IMAGES
+# Phase 11 — API Endpoints
 
-Artist profile pictures must be authentic.
+## Search
 
-Use artist images retrieved from:
-
-* MusicBrainz
-* Last.fm
-* Spotify metadata
-* Deezer
-* Wikipedia/Wikidata (where licensing permits)
-
-Never use random portrait photography.
-
-Every artist card must display the correct artist image.
+* [ ] /api/search
 
 ---
 
-## AUTHENTIC SONGS
+## Home
 
-Every section must contain real songs.
-
-Do not generate fake titles.
-
-Do not duplicate the same tracks throughout the homepage.
-
-Examples:
-
-Trending Charts
-
-→ real chart songs
-
-Recently Played
-
-→ actual user listening history
-
-For You
-
-→ recommendation engine output
-
-Mood Collections
-
-→ curated playlists
-
-Fresh Releases
-
-→ latest releases
-
-Trending Artists
-
-→ artists related to current charts
-
-Everything should represent genuine music metadata.
+* [ ] /api/home
 
 ---
 
-## UNIQUE CHART DATA
+## Song
 
-Every chart must contain its own independent dataset.
-
-Examples:
-
-Worldwide Top 50
-
-→ Global trending songs
-
-India Top 50
-
-→ Songs currently trending in India
-
-Hindi Top 50
-
-→ Hindi songs only
-
-Punjabi Top 50
-
-→ Punjabi songs only
-
-Tamil Top 50
-
-→ Tamil songs only
-
-Telugu Top 50
-
-→ Telugu songs only
-
-Malayalam Top 50
-
-→ Malayalam songs only
-
-K-Pop Top 50
-
-→ Korean artists only
-
-J-Pop Top 50
-
-→ Japanese artists only
-
-Rock Charts
-
-→ Rock songs only
-
-Hip-Hop Charts
-
-→ Hip-Hop only
-
-Electronic
-
-→ Electronic only
-
-Jazz
-
-→ Jazz only
-
-Classical
-
-→ Classical only
-
-Country
-
-→ Country only
-
-Lo-fi
-
-→ Lo-fi only
-
-Phonk
-
-→ Phonk only
-
-No chart should reuse another chart's dataset.
-
-Each chart should have completely different songs, artists, artwork, and rankings.
+* [ ] /api/song/:id
 
 ---
 
-## REGIONAL AUTHENTICITY
+## Artist
 
-Regional charts must represent the actual language and region.
-
-Examples:
-
-Hindi chart
-
-→ Hindi artists only
-
-Punjabi chart
-
-→ Punjabi artists only
-
-Tamil chart
-
-→ Tamil artists only
-
-Korea
-
-→ Korean artists
-
-Japan
-
-→ Japanese artists
-
-Brazil
-
-→ Brazilian artists
-
-France
-
-→ French artists
-
-Do not mix languages across regional charts.
+* [ ] /api/artist/:id
 
 ---
 
-## LIVE CHARTS
+## Album
 
-Charts should display dynamic metadata such as:
-
-* Current ranking
-* Weekly movement
-* Previous rank
-* Track count
-* Updated time
-* Popularity score
-* Trend direction
-* Plays
-* Saves
-* Likes
-
-Display labels like:
-
-Updated 12 minutes ago
-
-Updated Today
-
-This Week
-
-instead of static placeholder text.
+* [ ] /api/album/:id
 
 ---
 
-## AUTHENTIC PLAYLISTS
+## Playback
 
-Mood collections should not contain fake playlists.
-
-Generate them dynamically using real tracks.
-
-Examples:
-
-Late Night
-
-Rainy Evening
-
-Road Trip
-
-Workout
-
-Study
-
-Focus
-
-Coffee House
-
-Heartbreak
-
-Each playlist should contain songs that genuinely match the mood.
+* [ ] /api/playback/:id
 
 ---
 
-## RECOMMENDATION ENGINE
+## Lyrics
 
-The "For You" section should never reuse chart songs unless they are genuinely relevant.
-
-Recommendations should be based on:
-
-* Listening history
-* Likes
-* Recently played
-* Favorite artists
-* Favorite genres
-* Time of day
-* Mood
-* Discovery score
-* Similar artists
-
-Examples:
-
-Because you listened to...
-
-Continue Artist Journey
-
-Rediscover
-
-Hidden Gems
-
-Albums You May Like
-
-Deep Cuts
-
-Recently Obsessed
+* [ ] /api/lyrics/:id
 
 ---
 
-## IMAGE QUALITY
+## Recommendations
 
-Every artwork should be:
-
-High resolution
-
-Consistent aspect ratio
-
-Properly cached
-
-Dominant color extracted
-
-Used for dynamic UI theming
-
-No blurry placeholders.
-
-No stretched artwork.
-
-No duplicated images.
+* [ ] /api/recommendations
 
 ---
 
-## NO REPEATED CONTENT
+# Phase 12 — React Integration
 
-The homepage should avoid showing the same album, artist, or song multiple times unless there is a meaningful reason.
+Tasks
 
-Example:
-
-If "Birds of a Feather" appears in Global Charts, it should not also appear in Fresh Releases, Trending Playlists, Editors' Picks, Continue Exploring, and For You simultaneously.
-
-Ensure content diversity across sections.
-
----
-
-## DATA ARCHITECTURE
-
-The frontend should never contain hardcoded arrays for:
-
-artists
-
-albums
-
-songs
-
-playlists
-
-covers
-
-statistics
-
-followers
-
-monthly listeners
-
-charts
-
-Everything should be fetched from backend services or the aggregation layer.
-
-The homepage should act as a renderer of live data rather than a container of static content.
+* [ ] Remove all hardcoded JSON
+* [ ] Connect Home Page
+* [ ] Connect Search
+* [ ] Connect Artist Page
+* [ ] Connect Album Page
+* [ ] Connect Player
+* [ ] Connect Lyrics
+* [ ] Connect Recommendations
 
 ---
 
-## OVERALL GOAL
+# Phase 13 — Player
 
-The homepage should feel like opening Spotify, Apple Music, YouTube Music, or TIDAL on a real account.
+Tasks
 
-Every chart, artist, playlist, recommendation, album cover, and image should be authentic, relevant, unique, and dynamically generated instead of being repeated placeholder content.
+* [ ] Queue
+* [ ] Shuffle
+* [ ] Repeat
+* [ ] Seek
+* [ ] Volume
+* [ ] Continue Listening
+* [ ] Recently Played
+* [ ] Crossfade (Future)
+
+---
+
+# Phase 14 — Recommendation Engine
+
+Use
+
+* [ ] User History
+* [ ] Genres
+* [ ] Similar Artists
+* [ ] Similar Songs
+* [ ] Audio Features
+* [ ] Recently Played
+* [ ] Favorites
+
+---
+
+# Phase 15 — Performance
+
+Tasks
+
+* [ ] Redis (Future)
+* [ ] Mongo Cache
+* [ ] Lazy Loading
+* [ ] Pagination
+* [ ] Background Refresh
+* [ ] Image Optimization
+
+---
+
+# Phase 16 — Documentation
+
+Create
+
+* [ ] Architecture.md
+* [ ] Database.md
+* [ ] API.md
+* [ ] Provider Mapping.md
+* [ ] Deployment.md
+* [ ] Backend README
+* [ ] Frontend README
+
+---
+
+# Phase 17 — Production Deployment
+
+* [ ] Docker
+* [ ] Nginx
+* [ ] MongoDB
+* [ ] Environment Variables
+* [ ] Logging
+* [ ] Monitoring
+* [ ] Error Reporting
+
+---
+
+# Architecture Principles
+
+Always follow these rules:
+
+* Routes should never call providers directly.
+* Providers should communicate with only one external API.
+* Services should contain business logic.
+* Every provider response must be normalized.
+* React should only consume Flask APIs.
+* MongoDB stores user data and normalized cache.
+* Never expose provider-specific JSON to the frontend.
+* Design around provider abstraction, not provider dependence.
+* Every new provider should be pluggable without changing the frontend.
+* Build for scalability from the beginning.
+
+---
+
+# Current Priority Order
+
+1. Refactor backend architecture.
+2. Design MongoDB schema.
+3. Implement provider abstraction.
+4. Create canonical models.
+5. Build normalization layer.
+6. Implement service layer.
+7. Add MongoDB cache.
+8. Build REST APIs.
+9. Replace frontend hardcoded data.
+10. Add recommendations and advanced features.
+
+**Goal:** Build Lyrica as a production-grade music platform where metadata, playback, lyrics, and user data are cleanly separated, making the system scalable, maintainable, and easy to extend with new providers in the future.

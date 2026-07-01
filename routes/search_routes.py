@@ -1,33 +1,21 @@
 from flask import Blueprint, request, jsonify
-import requests
-from api.config import APIConfig
+from services.search_service import SearchService
 
 search_bp = Blueprint("search_bp", __name__)
 
-@search_bp.route("/search")
+@search_bp.route("", methods=["GET"])
 def search():
-    query = request.args.get("q", "")
+    query = request.args.get("q", "").strip()
+
     if not query:
-        return jsonify([])
+        return jsonify([]), 200
 
-    # ----- YOUTUBE FALLBACK -----
-    api_key = APIConfig.YOUTUBE_API_KEY
-    yt_url = (
-        "https://www.googleapis.com/youtube/v3/search"
-        f"?part=snippet&type=video&q={query}&key={api_key}"
-    )
+    try:
+        results = SearchService.search(query)
+        return jsonify(results), 200
 
-    r = requests.get(yt_url).json()
-    
-    results = []
-    for item in r.get("items", []):
-        vid = item["id"]["videoId"]
-        snippet = item["snippet"]
-        results.append({
-            "source": "youtube",
-            "title": snippet["title"],
-            "artist": snippet["channelTitle"],
-            "thumbnail": snippet["thumbnails"]["medium"]["url"],
-            "videoId": vid,
-        })
-    return jsonify(results)
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500

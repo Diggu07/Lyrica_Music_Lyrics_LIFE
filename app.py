@@ -5,19 +5,21 @@ from dotenv import load_dotenv
 load_dotenv()  # Must be first so MONGO_URI etc. are available everywhere
 
 # Monkeypatch MongoClient using mongomock for local development without local mongod
-try:
-    import mongomock
-    import pymongo
-    pymongo.MongoClient = mongomock.MongoClient
-    print("[MONGOMOCK] MongoClient monkeypatched with mongomock successfully!")
-except ImportError:
-    pass
+# try:
+#     import mongomock
+#     import pymongo
+#     pymongo.MongoClient = mongomock.MongoClient
+#     print("[MONGOMOCK] MongoClient monkeypatched with mongomock successfully!")
+# except ImportError:
+#     pass
 
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import safe_join
 from flask_login import LoginManager, current_user
 from flask_cors import CORS
 from routes.user_routes import user_bp
+from routes.home_routes import home_bp
+from routes.library_routes import library_bp
 
 
 def try_import(module_path, symbol=None):
@@ -39,11 +41,15 @@ auth_bp = try_import("auth", "auth_bp")
 music_bp = try_import("routes.music", "bp") or try_import("routes.music", "music_bp")
 playlist_bp = try_import("routes.playlist_routes", "bp") or try_import("routes.playlist_routes", "playlist_routes") or try_import("routes.playlist_routes", "playlist_bp")
 user_bp = try_import("routes.user_routes", "user_bp")
-song_activity_bp = try_import("routes.song_activity_routes", "bp") or try_import("routes.song_activity_routes", "song_activity_routes")
+history_bp = try_import("routes.history_routes", "bp")
 discover_bp = try_import("routes.discover_routes", "bp") or try_import("routes.discover_routes", "discover_bp")
 search_bp = try_import("routes.search_routes", "search_bp")
 lyrics_bp = try_import("routes.lyrics_routes", "lyrics_bp")
 artist_bp = try_import("routes.artist_routes", "artist_bp")
+recommendation_bp = try_import(
+    "routes.recommendation_routes",
+    "recommendation_bp"
+)
 
 
 
@@ -91,16 +97,23 @@ def create_app():
         app.register_blueprint(playlist_bp, url_prefix="/api/playlists")
     if user_bp:
         app.register_blueprint(user_bp, url_prefix="/api/user")
-    if song_activity_bp:
-        app.register_blueprint(song_activity_bp, url_prefix="/api/song_activity")
+    if history_bp:
+        app.register_blueprint(history_bp,url_prefix="/api/history")
     if discover_bp:
         app.register_blueprint(discover_bp, url_prefix="/api/discover")
     if search_bp:
-        app.register_blueprint(search_bp, url_prefix="/api")
+        app.register_blueprint(search_bp, url_prefix="/api/search")
     if lyrics_bp:
         app.register_blueprint(lyrics_bp, url_prefix="/api/lyrics")
     if artist_bp:
         app.register_blueprint(artist_bp, url_prefix="/api/artists")
+    if recommendation_bp:
+        app.register_blueprint(recommendation_bp,url_prefix="/api/recommendations")
+    if home_bp:
+        app.register_blueprint(home_bp,url_prefix="/api/home")
+    if library_bp:
+        app.register_blueprint(library_bp,url_prefix="/api/library")
+
 
 
 
